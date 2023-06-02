@@ -1,0 +1,11 @@
+{
+    "log_level":"info",
+    "log_file":"./app.log",
+    "http_addr":"0.0.0.0:8080",
+    "http_read_over_time":15,
+    "http_write_over_time":15,
+    "registry_addr":"127.0.0.1",
+    "docker_api_server":"127.0.0.1",
+    "docker_swarm_api_server":"127.0.0.1",
+    "k8s_api_server":"127.0.0.1"
+}
