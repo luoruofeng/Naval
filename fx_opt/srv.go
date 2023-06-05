@@ -57,7 +57,7 @@ func (f *FxSrv) Setup() {
 
 	//middlewares Provide
 	middlewareProv := fx.Provide(
-		fxhttp.AllAsMiddleware(middleware.NewLogMiddleware2)...,
+		fxhttp.AllAsMiddleware(middleware.NewLogMiddleware)...,
 	)
 
 	//config Provide

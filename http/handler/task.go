@@ -24,6 +24,7 @@ func NewTaskHandler(log *zap.Logger, taskSrv srv.TaskSrv) *TaskHandler {
 
 func (h *TaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
+	uuid := r.Header.Get("X-Request-Id")
 
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -32,23 +33,25 @@ func (h *TaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		h.log.Error("Could not read request body", zap.Error(err))
+		h.log.Error("Could not read request body", zap.String("uuid", uuid), zap.Error(err))
 		http.Error(w, "Could not read request body", http.StatusInternalServerError)
 		return
 	}
 
 	task, err := h.taskSrv.Unmarshal(body)
 	if err != nil {
-		h.log.Error("Could not parse YAML", zap.Error(err))
+		h.log.Error("Could not parse YAML", zap.String("uuid", uuid), zap.Error(err))
 		http.Error(w, "Could not parse YAML", http.StatusInternalServerError)
 		return
 	}
 
 	if err := task.Verify(); err != nil {
-		h.log.Info("task verify failed", zap.Error(err))
+		h.log.Info("task verify failed", zap.String("uuid", uuid), zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	task.Uuid = uuid
+	h.log.Info("task verify success", zap.String("uuid", uuid), zap.Any("task", task))
 	h.taskSrv.Handle(*task)
 
 	result := struct {
