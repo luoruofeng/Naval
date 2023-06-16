@@ -2,6 +2,7 @@ package fx_opt
 
 import (
 	m "github.com/luoruofeng/Naval/component/mongo"
+	ml "github.com/luoruofeng/Naval/component/mongo/logic"
 	"github.com/luoruofeng/Naval/srv"
 )
 
@@ -9,6 +10,8 @@ import (
 var ConstructorFuncs = []interface{}{
 	srv.NewTask,
 	m.NewMongoSrv,
+	ml.NewTaskMongoSrv,
+	ml.NewTaskResultMongoSrv,
 }
 
 // 在ConstructorFuncs添加了方法后，如果需要在方法的参数中传递fx.Lifecycle，已实现fx.Hook。需要在下方添加fx的invoke方法。
@@ -17,4 +20,6 @@ var InvokeFuncs = []interface{}{
 		go ts.InitWorkerpools()
 	},
 	func(m m.MongoSrv) {},
+	func(m ml.TaskMongoSrv) {},
+	func(m ml.TaskResultMongoSrv) {},
 }
