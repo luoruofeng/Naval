@@ -36,13 +36,12 @@ func NewTaskMongoSrv(lc fx.Lifecycle, mongoSrv ms.MongoSrv, logger *zap.Logger) 
 				// 如果 tasks 不存在则创建
 				err := db.CreateCollection(context.Background(), "tasks")
 				if err != nil {
-					logger.Error("创建collection：tasks失败", zap.Error(err))
-					panic(err)
+					logger.Info("创建collection：tasks失败", zap.Error(err))
+				} else {
+					logger.Info("tasks collection 创建成功!")
 				}
-				logger.Info("tasks collection 创建成功!")
 			} else {
 				logger.Info("tasks collection 已经存在!")
-
 			}
 			return nil
 		},
@@ -54,13 +53,24 @@ func NewTaskMongoSrv(lc fx.Lifecycle, mongoSrv ms.MongoSrv, logger *zap.Logger) 
 	return result
 }
 
-func (s TaskMongoSrv) Save(task model.Task) error {
+func (s TaskMongoSrv) Save(task model.Task) (*mongo.InsertOneResult, error) {
 	r, err := s.Collection.InsertOne(context.Background(), task)
 	if err != nil {
 		s.Logger.Error("插入collection：tasks失败", zap.Error(err))
-		return err
+		return nil, err
 	} else {
 		s.Logger.Info("插入collection：tasks成功", zap.Any("task", task), zap.Any("插入结果", r))
 	}
-	return nil
+	return r, nil
+}
+
+func (s TaskMongoSrv) Update(task model.Task) (*mongo.UpdateResult, error) {
+	r, err := s.Collection.UpdateByID(context.Background(), task.MongoId, task)
+	if err != nil {
+		s.Logger.Error("更新collection：tasks失败", zap.Error(err))
+		return nil, err
+	} else {
+		s.Logger.Info("更新collection：tasks成功", zap.Any("task", task), zap.Any("更新结果", r))
+	}
+	return r, nil
 }

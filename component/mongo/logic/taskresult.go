@@ -18,7 +18,7 @@ type TaskResultMongoSrv struct {
 }
 
 func NewTaskResultMongoSrv(lc fx.Lifecycle, mongoSrv m.MongoSrv, logger *zap.Logger) TaskResultMongoSrv {
-	result := TaskResultMongoSrv{MongoSrv: mongoSrv, Logger: logger, Collection: mongoSrv.Db.Collection("TaskResults")}
+	result := TaskResultMongoSrv{MongoSrv: mongoSrv, Logger: logger, Collection: mongoSrv.Db.Collection("task_results")}
 
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
@@ -37,9 +37,9 @@ func NewTaskResultMongoSrv(lc fx.Lifecycle, mongoSrv m.MongoSrv, logger *zap.Log
 				err := db.CreateCollection(context.Background(), "TaskResults")
 				if err != nil {
 					logger.Error("创建collection：TaskResults失败", zap.Error(err))
-					panic(err)
+				} else {
+					logger.Info("TaskResults collection 创建成功!")
 				}
-				logger.Info("TaskResults collection 创建成功!")
 			} else {
 				logger.Info("TaskResults collection 已经存在!")
 

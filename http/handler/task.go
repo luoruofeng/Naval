@@ -25,7 +25,6 @@ func NewTaskHandler(log *zap.Logger, taskSrv srv.TaskSrv) *TaskHandler {
 func (h *TaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	uuid := r.Header.Get("X-Request-Id")
-
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -50,8 +49,8 @@ func (h *TaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	task.Uuid = uuid
 	h.log.Info("task verify success", zap.String("uuid", uuid), zap.Any("task", task))
+	task.Uuid = uuid
 	h.taskSrv.Handle(*task)
 
 	result := struct {

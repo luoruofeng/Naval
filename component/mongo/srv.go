@@ -2,7 +2,6 @@ package mongo
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	c "github.com/luoruofeng/Naval/component/mongo/conf"
@@ -48,7 +47,7 @@ func NewMongoSrv(lc fx.Lifecycle, log *zap.Logger) MongoSrv {
 				log.Error("mongo client ping error", zap.Error(err))
 				panic(err)
 			}
-			fmt.Println("已经成功连接MongoDB!")
+			log.Info("已经成功连接MongoDB!")
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {

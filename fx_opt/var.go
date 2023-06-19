@@ -17,7 +17,7 @@ var ConstructorFuncs = []interface{}{
 // 在ConstructorFuncs添加了方法后，如果需要在方法的参数中传递fx.Lifecycle，已实现fx.Hook。需要在下方添加fx的invoke方法。
 var InvokeFuncs = []interface{}{
 	func(ts srv.TaskSrv) {
-		go ts.InitWorkerpools()
+		go ts.InitEventScheduler()
 	},
 	func(m m.MongoSrv) {},
 	func(m ml.TaskMongoSrv) {},
