@@ -25,7 +25,7 @@ func (l *LogMiddleware) Middleware(next http.Handler) http.Handler {
 		startTime := time.Now()
 		uuid := uuid.New().String()
 		r.Header.Set("X-Request-Id", uuid)
-		l.logger.Info("START REQUEST",
+		l.logger.Info("客户端发起的HTTP请求开始",
 			zap.String("uuid", uuid),
 			zap.String("method", r.Method),
 			zap.String("url", r.RequestURI),
@@ -41,7 +41,7 @@ func (l *LogMiddleware) Middleware(next http.Handler) http.Handler {
 		for k, v := range recorder.Header() {
 			w.Header()[k] = v
 		}
-		l.logger.Info("END REQUEST",
+		l.logger.Info("客户端发起的HTTP请求结束",
 			zap.String("uuid", uuid),
 			zap.Int("status", recorder.Code),
 			zap.String("body", recorder.Body.String()),

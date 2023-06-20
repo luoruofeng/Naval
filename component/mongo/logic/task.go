@@ -6,6 +6,7 @@ import (
 	ms "github.com/luoruofeng/Naval/component/mongo"
 	"github.com/luoruofeng/Naval/model"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -64,13 +65,46 @@ func (s TaskMongoSrv) Save(task model.Task) (*mongo.InsertOneResult, error) {
 	return r, nil
 }
 
-func (s TaskMongoSrv) Update(task model.Task) (*mongo.UpdateResult, error) {
-	r, err := s.Collection.UpdateByID(context.Background(), task.MongoId, task)
+func (s TaskMongoSrv) List() ([]model.Task, error) {
+	collection := s.Collection
+	cursor, err := collection.Find(context.Background(), bson.M{})
 	if err != nil {
-		s.Logger.Error("更新collection：tasks失败", zap.Error(err))
+		panic(err)
+	}
+	defer cursor.Close(context.Background())
+	tasks := make([]model.Task, 0)
+	for cursor.Next(context.Background()) {
+		var task model.Task
+		err = cursor.Decode(&task)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, task)
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, err
+	}
+	return tasks, nil
+}
+
+func (s TaskMongoSrv) Update(task model.Task) (*mongo.UpdateResult, error) {
+	if m, err := bson.Marshal(task); err != nil {
+		s.Logger.Error("更新collection：tasks失败-结构体转bson.M失败", zap.Error(err))
 		return nil, err
 	} else {
-		s.Logger.Info("更新collection：tasks成功", zap.Any("task", task), zap.Any("更新结果", r))
+		var updateFields bson.D
+		bson.Unmarshal(m, &updateFields)
+		update := bson.M{
+			"$set": updateFields,
+		}
+		id := bson.M{"_id": bson.M{"$eq": task.MongoId}}
+		r, err := s.Collection.UpdateByID(context.Background(), id, update)
+		if err != nil {
+			s.Logger.Error("更新collection：tasks失败", zap.Error(err), zap.Any("data", m))
+			return nil, err
+		} else {
+			s.Logger.Info("更新collection：tasks成功", zap.Any("task", task), zap.Any("更新结果", r))
+		}
+		return r, nil
 	}
-	return r, nil
 }

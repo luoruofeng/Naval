@@ -29,17 +29,15 @@ func NewHTTPServer(lc fx.Lifecycle, logger *zap.Logger, c *conf.Config, r *mux.R
 			go func() {
 				logger.Info("HTTP server 启动!", zap.String("addr", server.Addr))
 				server.Serve(ln)
-				defer func() {
-					server.Close()
-					logger.Info("HTTP server 停止!")
-					cancel()
-					logger.Info("context 取消!")
-				}()
 			}()
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
 			logger.Info("Stopping HTTP server!")
+			server.Close()
+			logger.Info("HTTP server 停止!")
+			cancel()
+			logger.Info("context 取消!")
 			return server.Shutdown(ctx)
 		},
 	})

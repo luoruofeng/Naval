@@ -27,19 +27,19 @@ const (
 )
 
 type Task struct {
-	Uuid        string             `yaml:"uuid,omitempty"`                          //系统生成的每个HTTP请求的uuid
-	Id          string             `yaml:"id"`                                      //客户传过来的任务id
-	MongoId     primitive.ObjectID `yaml:"mongo_id,omitempty" bson:"_id,omitempty"` //mongo id
-	CreatedAt   time.Time          `yaml:"created_at"`                              //创建时间
-	Available   bool               `yaml:"available"`                               //是否可用
+	Id          string             `yaml:"id"`           //客户传过来的任务id
+	Available   bool               `yaml:"available"`    //是否可用
+	WaitSeconds int                `yaml:"wait_seconds"` //等待执行时间
 	Items       []Item             `yaml:"items"`
-	Sechedule   string             `yaml:"sechedule,omitempty"`    //定时任务表达式
-	WaitSeconds int                `yaml:"wait_seconds,omitempty"` //等待执行时间               //任务项
-	PlanExecAt  time.Time          `yaml:"plan_exec_at,omitempty"` //计划执行时间
-	ExtTime     time.Time          `yaml:"ExtTime,omitempty"`      //扩展字段，用于记录任务执行时间
-	ExtDoneTime time.Time          `yaml:"ExtDoneTime,omitempty"`  //扩展字段，用于记录任务执行完成时间
-	ExtTimes    int                `yaml:"ExtTimes,omitempty"`     //扩展字段，用于记录任务执行次数
-	StateCode   SC                 `yaml:"statecode,omitempty"`    //扩展字段，用于记录任务执行状态码
+	Uuid        string             `yaml:"uuid,omitempty"`                          //系统生成的每个HTTP请求的uuid
+	CreatedAt   time.Time          `yaml:"created_at,omitempty"`                    //创建时间
+	Sechedule   string             `yaml:"sechedule,omitempty"`                     //定时任务表达式,暂时没有开发此功能
+	MongoId     primitive.ObjectID `yaml:"mongo_id,omitempty" bson:"_id,omitempty"` //mongo id
+	PlanExecAt  time.Time          `yaml:"plan_exec_at,omitempty"`                  //计划执行时间
+	ExtTime     time.Time          `yaml:"ExtTime,omitempty"`                       //扩展字段，用于记录任务执行时间
+	ExtDoneTime time.Time          `yaml:"ExtDoneTime,omitempty"`                   //扩展字段，用于记录任务执行完成时间
+	ExtTimes    int                `yaml:"ExtTimes,omitempty"`                      //扩展字段，用于记录任务执行次数
+	StateCode   SC                 `yaml:"statecode,omitempty"`                     //扩展字段，用于记录任务执行状态码
 }
 
 type TaskResult struct {

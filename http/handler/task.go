@@ -11,14 +11,14 @@ import (
 
 type TaskHandler struct {
 	log     *zap.Logger
-	taskSrv srv.TaskSrv
+	taskSrv *srv.TaskSrv
 }
 
 func (*TaskHandler) Pattern() string {
 	return "/task"
 }
 
-func NewTaskHandler(log *zap.Logger, taskSrv srv.TaskSrv) *TaskHandler {
+func NewTaskHandler(log *zap.Logger, taskSrv *srv.TaskSrv) *TaskHandler {
 	return &TaskHandler{log: log, taskSrv: taskSrv}
 }
 
