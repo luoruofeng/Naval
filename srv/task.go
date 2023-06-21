@@ -64,6 +64,7 @@ func (ts *TaskSrv) CalcLatestExecTime() {
 	ts.lock.Lock()
 	ts.lastExecTimeSecond = 0
 	now := time.Now()
+	lastPlanExecTime := now
 	for i, task := range ts.pendingTasks {
 		if task.Available {
 			if task.PlanExecAt.Before(now) ||
@@ -73,11 +74,15 @@ func (ts *TaskSrv) CalcLatestExecTime() {
 				// 执行任务
 				go ts.ExecTask(task)
 			} else {
-				if ts.lastExecTimeSecond == 0 {
-					ts.lastExecTimeSecond = task.WaitSeconds
+				if lastPlanExecTime.Equal(now) {
+					// 第一次计算
+					lastPlanExecTime = task.PlanExecAt
+					ts.lastExecTimeSecond = int(task.PlanExecAt.Sub(now).Seconds())
 				} else {
-					if task.WaitSeconds < ts.lastExecTimeSecond {
-						ts.lastExecTimeSecond = task.WaitSeconds
+					if task.PlanExecAt.Before(lastPlanExecTime) {
+						// 更新最近的执行时间
+						lastPlanExecTime = task.PlanExecAt
+						ts.lastExecTimeSecond = int(task.PlanExecAt.Sub(now).Seconds())
 					}
 				}
 			}
@@ -90,7 +95,7 @@ func (ts *TaskSrv) CalcLatestExecTime() {
 	if ts.lastExecTimeSecond == 0 {
 		ts.lastExecTimeSecond = 1
 	}
-	log.Info("计算最近的执行时间 ", zap.Int("lastExecTimeSecond", ts.lastExecTimeSecond), zap.Any("pending_tasks", ts.pendingTasks), zap.Any("pointer", fmt.Sprintf("%p %p\n", &ts, &ts.pendingTasks)))
+	log.Info("计算-最近的执行时间 ", zap.Int("lastExecTimeSecond", ts.lastExecTimeSecond), zap.Any("lastPlanExecTime", lastPlanExecTime), zap.Any("pending_tasks", ts.pendingTasks))
 	ts.lock.Unlock()
 }
 
@@ -155,7 +160,7 @@ func (ts *TaskSrv) Handle(task m.Task) {
 
 func (ts *TaskSrv) InitExecTaskScheduler() {
 	log := ts.logger
-	log.Info("初始化执行任务调度器 ExecTaskScheduler", zap.Any("pointer", fmt.Sprintf("%p %p\n", &ts, &ts.pendingTasks)))
+	log.Info("初始化执行任务调度器 ExecTaskScheduler")
 	defer log.Info("退出 InitExecTaskScheduler")
 	timer := time.NewTimer(time.Duration(ts.lastExecTimeSecond) * time.Second)
 	for {
@@ -166,7 +171,7 @@ func (ts *TaskSrv) InitExecTaskScheduler() {
 			ts.logger.Info("关闭任务执行通道 execTaskChan")
 			return
 		case <-timer.C:
-			log.Info("开始任务调度", zap.Any("pointer", fmt.Sprintf("%p %p\n", &ts, &ts.pendingTasks)))
+			log.Info("开始任务调度")
 			ts.CalcLatestExecTime()
 			timer.Reset(time.Duration(ts.lastExecTimeSecond) * time.Second)
 		case t, ok := <-ts.execTaskChan:
@@ -182,7 +187,7 @@ func (ts *TaskSrv) InitExecTaskScheduler() {
 }
 
 func (ts *TaskSrv) InitEventScheduler() {
-	ts.logger.Info("初始化事件调度器 InitEventScheduler", zap.Any("pointer", fmt.Sprintf("%p %p\n", &ts, &ts.pendingTasks)))
+	ts.logger.Info("初始化事件调度器 InitEventScheduler")
 	defer ts.logger.Info("退出 InitEventScheduler")
 	// 监听任务通道
 	for {
@@ -210,7 +215,7 @@ func (ts *TaskSrv) InitEventScheduler() {
 						}
 						ts.lock.Lock()
 						ts.pendingTasks = append(ts.pendingTasks, t)
-						ts.logger.Info("待执行列表添加任务", zap.Any("pending_tasks", ts.pendingTasks), zap.Any("pointer", fmt.Sprintf("%p %p\n", &ts, &ts.pendingTasks)))
+						ts.logger.Info("待执行列表添加任务", zap.Any("pending_tasks", ts.pendingTasks))
 						ts.lock.Unlock()
 						ts.execTaskChan <- t // 任务放入执行通道
 					} else {

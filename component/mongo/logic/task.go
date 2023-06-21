@@ -88,19 +88,18 @@ func (s TaskMongoSrv) List() ([]model.Task, error) {
 }
 
 func (s TaskMongoSrv) Update(task model.Task) (*mongo.UpdateResult, error) {
-	if m, err := bson.Marshal(task); err != nil {
+	if bs, err := bson.Marshal(task); err != nil {
 		s.Logger.Error("更新collection：tasks失败-结构体转bson.M失败", zap.Error(err))
 		return nil, err
 	} else {
-		var updateFields bson.D
-		bson.Unmarshal(m, &updateFields)
-		update := bson.M{
-			"$set": updateFields,
+		var updateKVs bson.D
+		bson.Unmarshal(bs, &updateKVs)
+		updateData := bson.M{
+			"$set": updateKVs,
 		}
-		id := bson.M{"_id": bson.M{"$eq": task.MongoId}}
-		r, err := s.Collection.UpdateByID(context.Background(), id, update)
+		r, err := s.Collection.UpdateByID(context.Background(), task.MongoId, updateData)
 		if err != nil {
-			s.Logger.Error("更新collection：tasks失败", zap.Error(err), zap.Any("data", m))
+			s.Logger.Error("更新collection：tasks失败", zap.Error(err), zap.Any("data", bs))
 			return nil, err
 		} else {
 			s.Logger.Info("更新collection：tasks成功", zap.Any("task", task), zap.Any("更新结果", r))

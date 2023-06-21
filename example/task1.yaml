@@ -1,6 +1,6 @@
-id: task-1
+id: task-0
 available: true
-wait_seconds: 6
+wait_seconds: 0
 items:
   - is_running: true
     need_delete: true
