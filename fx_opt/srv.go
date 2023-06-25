@@ -52,7 +52,7 @@ func (f *FxSrv) Setup() {
 
 	//handlers Provide
 	handlerProv := fx.Provide(
-		fxhttp.AllAsRoute(handler.NewTaskHandler)...,
+		fxhttp.AllAsRoute(handler.NewTaskHandler, handler.NewTaskDelHandler)...,
 	)
 
 	//middlewares Provide

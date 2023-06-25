@@ -51,8 +51,23 @@ func (h *TaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	h.log.Info("task verify success", zap.String("uuid", uuid), zap.Any("task", task))
 	task.Uuid = uuid
-	h.taskSrv.Handle(*task)
-
+	err = h.taskSrv.Handle(*task)
+	if err != nil {
+		h.log.Error("创建任务失败", zap.Any("task_id", task.Id), zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		result := struct {
+			TaskId  string `json:"task_id"`
+			Message string `json:"message"`
+			Error   string `json:"error"`
+		}{
+			TaskId:  task.Id,
+			Message: "Failed to create task",
+			Error:   err.Error(),
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		json.NewEncoder(w).Encode(result)
+		return
+	}
 	result := struct {
 		TaskId  string `json:"task_id"`
 		Message string `json:"message"`

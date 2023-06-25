@@ -10,14 +10,14 @@ import (
 	"testing"
 )
 
-func getRootProjPath(current string) string {
+func GetRootProjPath(current string) string {
 	path := filepath.Join(current, "go.mod")
 	_, err := os.Stat(path)
 	if err == nil {
 		return current
 	} else {
 		if os.IsNotExist(err) {
-			return getRootProjPath(filepath.Dir(current))
+			return GetRootProjPath(filepath.Dir(current))
 		} else {
 			panic(err)
 		}
@@ -34,7 +34,7 @@ func TestHandler(t *testing.T) {
 	}
 
 	// 获取项目根目录
-	rootDir := getRootProjPath(cwd)
+	rootDir := GetRootProjPath(cwd)
 	data, err := ioutil.ReadFile(filepath.Join(rootDir, "example/task1.yaml"))
 
 	if err != nil {

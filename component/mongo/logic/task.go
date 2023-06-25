@@ -7,6 +7,7 @@ import (
 	"github.com/luoruofeng/Naval/model"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -85,6 +86,33 @@ func (s TaskMongoSrv) List() ([]model.Task, error) {
 		return nil, err
 	}
 	return tasks, nil
+}
+
+func (s TaskMongoSrv) FindById(id string) (*model.Task, error) {
+	findFilter := bson.M{"id": id}
+	r := s.Collection.FindOne(context.Background(), findFilter)
+	if r.Err() != nil {
+		return nil, r.Err()
+	} else {
+		var task model.Task
+		r.Decode(&task)
+		return &task, nil
+	}
+}
+
+func (s TaskMongoSrv) Delete(id primitive.ObjectID) (*mongo.UpdateResult, error) {
+	r, err := s.Collection.UpdateByID(context.Background(), id, bson.M{
+		"$set": bson.M{
+			"available": false,
+		},
+	})
+	if err != nil {
+		s.Logger.Error("删除collection：tasks失败", zap.Error(err))
+		return nil, err
+	} else {
+		s.Logger.Info("删除collection：tasks成功", zap.Any("id", id), zap.Any("更新结果", r))
+	}
+	return r, nil
 }
 
 func (s TaskMongoSrv) Update(task model.Task) (*mongo.UpdateResult, error) {
