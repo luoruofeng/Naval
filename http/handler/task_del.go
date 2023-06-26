@@ -23,6 +23,12 @@ func NewTaskDelHandler(log *zap.Logger, taskSrv *srv.TaskSrv) *TaskDelHandler {
 }
 
 func (h *TaskDelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	defer r.Body.Close()
 	vars := mux.Vars(r)
 	id := vars["id"]

@@ -34,7 +34,7 @@ type Task struct {
 	Uuid        string             `yaml:"uuid,omitempty"`                          //系统生成的每个HTTP请求的uuid
 	CreatedAt   time.Time          `yaml:"created_at,omitempty"`                    //创建时间
 	IsRunning   bool               `yaml:"is_running,omitempty"`                    //是否正在执行
-	ChangedAt   time.Time          `yaml:"changed_at,omitempty"`                    //修改时间
+	UpdateAt    time.Time          `yaml:"update_at,omitempty"`                     //修改时间
 	Sechedule   string             `yaml:"sechedule,omitempty"`                     //定时任务表达式,暂时没有开发此功能
 	MongoId     primitive.ObjectID `yaml:"mongo_id,omitempty" bson:"_id,omitempty"` //mongo id
 	PlanExecAt  time.Time          `yaml:"plan_exec_at,omitempty"`                  //计划执行时间

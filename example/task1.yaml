@@ -1,6 +1,6 @@
-id: task-11211
+id: task-112
 available: true
-wait_seconds: 11211
+wait_seconds: 11
 items:
   - is_running: true
     need_delete: true
@@ -8,6 +8,6 @@ items:
       version: '3'
       services:
         web:
-          image: nginx
+          image: nginx:abc12333333
           ports:
             - "8080:80"
