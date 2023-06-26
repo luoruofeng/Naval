@@ -8,21 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-)
 
-func GetRootProjPath(current string) string {
-	path := filepath.Join(current, "go.mod")
-	_, err := os.Stat(path)
-	if err == nil {
-		return current
-	} else {
-		if os.IsNotExist(err) {
-			return GetRootProjPath(filepath.Dir(current))
-		} else {
-			panic(err)
-		}
-	}
-}
+	"github.com/luoruofeng/Naval/util"
+)
 
 func TestHandler(t *testing.T) {
 	// 获取当前工作目录
@@ -34,7 +22,7 @@ func TestHandler(t *testing.T) {
 	}
 
 	// 获取项目根目录
-	rootDir := GetRootProjPath(cwd)
+	rootDir := util.GetRootProjPath(cwd)
 	data, err := ioutil.ReadFile(filepath.Join(rootDir, "example/task1.yaml"))
 
 	if err != nil {

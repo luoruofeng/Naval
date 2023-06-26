@@ -44,8 +44,17 @@ func NewTaskSrv(lc fx.Lifecycle, logger *zap.Logger, ctx context.Context, taskMo
 	logger.Info("初始化task更新通道")
 	execTaskChan := make(chan m.Task)
 	logger.Info("初始化待执行的任务列表")
-	// TODO 初始化mongo任务数据到pendingTasks
 	pendingTasks := make([]m.Task, 0)
+	// TODO 初始化mongo任务数据到pendingTasks
+	pts, err := taskMongoSrv.GetPendingTask()
+	if err != nil {
+		logger.Error("初始化待执行的任务列表失败", zap.Error(err))
+		return nil
+	} else {
+		pendingTasks = append(pendingTasks, pts...)
+		fmt.Println("--------")
+		logger.Info("初始化待执行的任务列表成功", zap.Any("pending_tasks", pendingTasks))
+	}
 
 	result := TaskSrv{
 		logger:             logger,

@@ -66,9 +66,38 @@ func (s TaskMongoSrv) Save(task model.Task) (*mongo.InsertOneResult, error) {
 	return r, nil
 }
 
-func (s TaskMongoSrv) List() ([]model.Task, error) {
+func (s TaskMongoSrv) GetAll() ([]model.Task, error) {
 	collection := s.Collection
-	cursor, err := collection.Find(context.Background(), bson.M{})
+	filter := bson.M{
+		"available": true,
+	}
+	cursor, err := collection.Find(context.Background(), filter)
+	if err != nil {
+		panic(err)
+	}
+	defer cursor.Close(context.Background())
+	tasks := make([]model.Task, 0)
+	for cursor.Next(context.Background()) {
+		var task model.Task
+		err = cursor.Decode(&task)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, task)
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, err
+	}
+	return tasks, nil
+}
+
+func (s TaskMongoSrv) GetPendingTask() ([]model.Task, error) {
+	collection := s.Collection
+	filter := bson.M{
+		"available": true,
+		"statecode": model.Pending,
+	}
+	cursor, err := collection.Find(context.Background(), filter)
 	if err != nil {
 		panic(err)
 	}
