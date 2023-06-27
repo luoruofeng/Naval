@@ -5,9 +5,24 @@ items:
   - is_running: true
     need_delete: true
     compose_content: |
-      version: '3'
-      services:
-        web:
-          image: nginx:abc12333333
-          ports:
-            - "8080:80"
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: demo-deployment
+      spec:
+        replicas: 2
+        selector:
+          matchLabels:
+            app: demo
+        template:
+          metadata:
+            labels:
+              app: demo
+          spec:
+            containers:
+            - image: nginx:1.12
+              name: web
+              ports:
+              - containerPort: 80
+                name: http
+                protocol: TCP
