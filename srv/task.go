@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luoruofeng/Naval/kube"
+
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -29,9 +31,10 @@ type TaskSrv struct {
 	mongoTR            mongo.TaskResultMongoSrv // mongo任务结果服务
 	lastExecTimeSecond int                      // 等待多少秒后开始执行任务
 	lock               sync.Mutex               //用于pendingTasks的锁
+	kubeTaskSrv        *kube.TaskKubeSrv        //k8s服务
 }
 
-func NewTaskSrv(lc fx.Lifecycle, logger *zap.Logger, ctx context.Context, taskMongoSrv mongo.TaskMongoSrv, taskResultMongoSrv mongo.TaskResultMongoSrv) *TaskSrv {
+func NewTaskSrv(lc fx.Lifecycle, kubeTaskSrv *kube.TaskKubeSrv, logger *zap.Logger, ctx context.Context, taskMongoSrv mongo.TaskMongoSrv, taskResultMongoSrv mongo.TaskResultMongoSrv) *TaskSrv {
 	logger.Info("初始化task服务")
 	logger.Info("初始化task结果通道")
 	taskResults := make(chan m.TaskResult)
@@ -45,14 +48,13 @@ func NewTaskSrv(lc fx.Lifecycle, logger *zap.Logger, ctx context.Context, taskMo
 	execTaskChan := make(chan m.Task)
 	logger.Info("初始化待执行的任务列表")
 	pendingTasks := make([]m.Task, 0)
-	// TODO 初始化mongo任务数据到pendingTasks
+	// 初始化mongo任务数据到pendingTasks
 	pts, err := taskMongoSrv.GetPendingTask()
 	if err != nil {
 		logger.Error("初始化待执行的任务列表失败", zap.Error(err))
 		return nil
 	} else {
 		pendingTasks = append(pendingTasks, pts...)
-		fmt.Println("--------")
 		logger.Info("初始化待执行的任务列表成功", zap.Any("pending_tasks", pendingTasks))
 	}
 
@@ -68,6 +70,7 @@ func NewTaskSrv(lc fx.Lifecycle, logger *zap.Logger, ctx context.Context, taskMo
 		lastExecTimeSecond: 1,
 		deleteTaskChan:     deleteTaskChan,
 		updateTaskChan:     updateTaskChan,
+		kubeTaskSrv:        kubeTaskSrv,
 	}
 
 	lc.Append(fx.Hook{
@@ -212,6 +215,20 @@ func (ts *TaskSrv) Delete(id string) error {
 				if t.StateCode == m.Pending {
 					ts.deleteTaskChan <- id // 任务放入删除通道
 				}
+				// 删除k8s中的resources
+				go func() {
+					kinds, names, err := kube.GetK8sYamlKindAndName(t)
+					if err != nil {
+						ts.logger.Error("删除任务后删除k8s资源-获取k8s yaml kind和name失败", zap.Any("task", t), zap.Error(err))
+					}
+					for i, kind := range kinds {
+						if err := ts.kubeTaskSrv.Delete(kind, names[i]); err != nil {
+							ts.logger.Error("删除任务后删除k8s资源-删除k8s资源失败", zap.Any("task", t), zap.Error(err))
+						} else {
+							ts.logger.Info("删除任务后删除k8s资源-删除k8s资源成功", zap.Any("task", t), zap.String("kind", kind), zap.String("name", names[i]))
+						}
+					}
+				}()
 				return nil
 			}
 		} else if t.StateCode == m.Running { // 运行中不能删除
@@ -233,13 +250,63 @@ func (ts *TaskSrv) ExecTask(task m.Task) {
 	task.IsRunning = true // 设置任务正在运行
 	// 更新mongo任务
 	if r, err := ts.mongoT.Update(task); err != nil {
-		log.Error("执行任务前更新任务失败", zap.Any("task", task), zap.Error(err))
+		log.Error("任务执行-执行任务前更新任务状态失败", zap.Any("task", task), zap.Error(err))
 		return
 	} else {
-		log.Info("执行任务前更新任务成功", zap.Any("task", task), zap.Any("update_result", r))
+		log.Info("任务执行-执行任务前更新任务状态成功", zap.Any("task", task), zap.Any("update_result", r))
 	}
-	log.Info("任务开始执行", zap.Any("task", task))
-	// TODO: 执行任务
+	log.Info("任务执行-开始", zap.Any("task", task))
+	// 执行任务
+	var execSuccessfully bool = true //任务是否成功的总体结果
+	for i, item := range task.Items {
+		var tr m.TaskResult
+		if item.K8SYamlContent != "" {
+			if err := ts.kubeTaskSrv.Create(item.K8SYamlContent); err != nil {
+				log.Error("任务执行项-失败", zap.String("item.K8SYamlContent", item.K8SYamlContent), zap.Any("task", task), zap.Error(err))
+				tr = m.NewTaskResult(task.Id, i, err.Error(), "", m.ResultFail)
+				execSuccessfully = false
+			} else {
+				log.Info("任务执行项-成功", zap.Any("task", task))
+				tr = m.NewTaskResult(task.Id, i, "", "任务执行项-成功", m.ResultSuccess)
+			}
+			insertR, err := ts.mongoTR.Save(tr)
+			if err != nil || insertR.InsertedID == nil {
+				log.Error("任务执行项-保存任务结果失败 Save", zap.Any("task result", tr), zap.Error(err))
+				continue
+			} else {
+				log.Info("任务执行项-保存任务结果成功 Save", zap.Any("task result", tr), zap.Any("mongo id", insertR.InsertedID))
+			}
+			go func(mongoId primitive.ObjectID, trid string) {
+				if updateResult, err := ts.mongoT.UpdatePushKV(mongoId, "ExecResultIds", trid); err != nil || updateResult.ModifiedCount < 1 {
+					log.Error("任务执行项-更新任务结果失败 UpdatePushKV", zap.Any("mongo id", mongoId), zap.String("task result id", trid), zap.Any("updateResult", updateResult), zap.Error(err))
+				} else {
+					log.Info("任务执行项-更新任务结果成功 UpdatePushKV", zap.Any("mongo id", mongoId), zap.String("task result id", trid), zap.Any("updateResult", updateResult))
+				}
+			}(task.MongoId, tr.Id)
+		}
+	}
+
+	go func(mongoId primitive.ObjectID, execSuccessfully bool) {
+		if updateResult, err := ts.mongoT.UpdateKVs(mongoId, map[string]interface{}{"ExecSuccessfully": execSuccessfully}); err != nil || updateResult.ModifiedCount < 1 {
+			log.Error("任务执行-更新任务是否成功的总体结果失败 UpdateKVs", zap.Any("mongo id", mongoId), zap.Any("task", task), zap.Bool("execSuccessfully", execSuccessfully), zap.Any("updateResult", updateResult), zap.Error(err))
+		} else {
+			log.Info("任务执行-更新任务是否成功的总体结果成功 UpdateKVs", zap.Any("mongo id", mongoId), zap.Any("task", task), zap.Bool("execSuccessfully", execSuccessfully), zap.Any("updateResult", updateResult))
+		}
+	}(task.MongoId, execSuccessfully)
+
+	// 更新任务状态为停止
+	task.StateCode = m.Stopped
+	// 更新任务执行时间
+	task.ExtDoneTime = time.Now()
+	// 设置任务没有运行
+	task.IsRunning = false
+	// 更新mongo任务
+	if r, err := ts.mongoT.Update(task); err != nil {
+		log.Error("任务执行结束-执行任务结束更新任务状态失败", zap.Any("task", task), zap.Error(err))
+		return
+	} else {
+		log.Info("任务执行结束-执行任务结束更新任务状态成功", zap.Any("task", task), zap.Any("update_result", r))
+	}
 }
 
 func (ts *TaskSrv) Update(task m.Task) error {
@@ -293,16 +360,16 @@ func (ts *TaskSrv) Add(task m.Task) error {
 	// mongo保存任务
 	log.Info("保存任务到mongoDB", zap.Any("task", task))
 	if r, err := ts.mongoT.Save(task); err != nil {
-		log.Error("保存任务失败", zap.Any("task", task), zap.Error(err))
+		log.Error("保存任务-失败", zap.Any("task", task), zap.Error(err))
 		return err
 	} else {
 		mongoId, ok := r.InsertedID.(primitive.ObjectID)
 		if !ok {
-			log.Info("保存任务成功 mongo Id转换失败", zap.Any("task", task), zap.Any("mongo_id", r.InsertedID))
+			log.Info("保存任务-成功 mongo Id转换失败", zap.Any("task", task), zap.Any("mongo_id", r.InsertedID))
 			return errors.New("保存任务成功-mongoId转换失败")
 		} else {
 			task.MongoId = mongoId
-			log.Info("保存任务成功", zap.Any("task", task), zap.Any("mongo_id", r.InsertedID))
+			log.Info("保存任务-成功", zap.Any("task", task), zap.Any("mongo_id", r.InsertedID))
 		}
 	}
 	ts.createTaskChan <- task

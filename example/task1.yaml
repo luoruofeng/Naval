@@ -1,16 +1,16 @@
-id: task-111123
+id: task-2
 available: true
-wait_seconds: 11
+wait_seconds: 2
 items:
   - is_running: true
     need_delete: true
-    compose_content: |
+    k8s_yaml_content: |
       apiVersion: apps/v1
       kind: Deployment
       metadata:
         name: demo-deployment
       spec:
-        replicas: 2
+        replicas: 3
         selector:
           matchLabels:
             app: demo
@@ -20,9 +20,81 @@ items:
               app: demo
           spec:
             containers:
-            - image: nginx:1.12
+            - image: nginx:1.13
               name: web
               ports:
               - containerPort: 80
                 name: http
                 protocol: TCP
+  - is_running: true
+    need_delete: true
+    k8s_yaml_content: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: demo-deployment2
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: demo2
+        template:
+          metadata:
+            labels:
+              app: demo2
+          spec:
+            containers:
+            - image: nginx:1.14
+              name: web
+              ports:
+              - containerPort: 80
+                name: http
+                protocol: TCP
+  - is_running: true
+    need_delete: true
+    k8s_yaml_content: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ubuntu-deployment
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: ubuntu
+        template:
+          metadata:
+            labels:
+              app: ubuntu
+          spec:
+            containers:
+            - name: ubuntu-container
+              image: ubuntu
+              command: ["sleep", "infinity"]
+  - is_running: true
+    need_delete: true
+    k8s_yaml_content: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: mysql
+        labels:
+          app: mysql
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: mysql
+        template:
+          metadata:
+            labels:
+              app: mysql
+          spec:
+            containers:
+            - name: mysql
+              image: mysql:latest
+              ports:
+              - containerPort: 3306
+              env:
+              - name: MYSQL_ROOT_PASSWORD
+                value: your_password

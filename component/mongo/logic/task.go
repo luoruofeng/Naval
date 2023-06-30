@@ -58,18 +58,16 @@ func NewTaskMongoSrv(lc fx.Lifecycle, mongoSrv ms.MongoSrv, logger *zap.Logger) 
 func (s TaskMongoSrv) Save(task model.Task) (*mongo.InsertOneResult, error) {
 	r, err := s.Collection.InsertOne(context.Background(), task)
 	if err != nil {
-		s.Logger.Error("插入collection：tasks失败", zap.Error(err))
 		return nil, err
 	} else {
-		s.Logger.Info("插入collection：tasks成功", zap.Any("task", task), zap.Any("插入结果", r))
+		return r, nil
 	}
-	return r, nil
 }
 
 func (s TaskMongoSrv) GetAll() ([]model.Task, error) {
 	collection := s.Collection
 	filter := bson.M{
-		"available": true,
+		"Available": true,
 	}
 	cursor, err := collection.Find(context.Background(), filter)
 	if err != nil {
@@ -94,8 +92,8 @@ func (s TaskMongoSrv) GetAll() ([]model.Task, error) {
 func (s TaskMongoSrv) GetPendingTask() ([]model.Task, error) {
 	collection := s.Collection
 	filter := bson.M{
-		"available": true,
-		"statecode": model.Pending,
+		"Available": true,
+		"StateCode": model.Pending,
 	}
 	cursor, err := collection.Find(context.Background(), filter)
 	if err != nil {
@@ -118,7 +116,7 @@ func (s TaskMongoSrv) GetPendingTask() ([]model.Task, error) {
 }
 
 func (s TaskMongoSrv) FindById(id string) (*model.Task, error) {
-	findFilter := bson.M{"id": id}
+	findFilter := bson.M{"Id": id, "Available": true}
 	r := s.Collection.FindOne(context.Background(), findFilter)
 	if r.Err() != nil {
 		return nil, r.Err()
@@ -132,21 +130,17 @@ func (s TaskMongoSrv) FindById(id string) (*model.Task, error) {
 func (s TaskMongoSrv) Delete(id primitive.ObjectID) (*mongo.UpdateResult, error) {
 	r, err := s.Collection.UpdateByID(context.Background(), id, bson.M{
 		"$set": bson.M{
-			"available": false,
+			"Available": false,
 		},
 	})
 	if err != nil {
-		s.Logger.Error("删除collection：tasks失败", zap.Error(err))
 		return nil, err
-	} else {
-		s.Logger.Info("删除collection：tasks成功", zap.Any("id", id), zap.Any("更新结果", r))
 	}
 	return r, nil
 }
 
 func (s TaskMongoSrv) Update(task model.Task) (*mongo.UpdateResult, error) {
 	if bs, err := bson.Marshal(task); err != nil {
-		s.Logger.Error("更新collection：tasks失败-结构体转bson.M失败", zap.Error(err))
 		return nil, err
 	} else {
 		var updateKVs bson.D
@@ -156,11 +150,46 @@ func (s TaskMongoSrv) Update(task model.Task) (*mongo.UpdateResult, error) {
 		}
 		r, err := s.Collection.UpdateByID(context.Background(), task.MongoId, updateData)
 		if err != nil {
-			s.Logger.Error("更新collection：tasks失败", zap.Error(err), zap.Any("data", bs))
 			return nil, err
-		} else {
-			s.Logger.Info("更新collection：tasks成功", zap.Any("task", task), zap.Any("更新结果", r))
 		}
 		return r, nil
 	}
+}
+
+func (s TaskMongoSrv) UpdateKVs(mongoId primitive.ObjectID, kvs map[string]interface{}) (*mongo.UpdateResult, error) {
+	// var updateKVs bson.D
+	// for k, v := range kvs {
+	// 	updateKVs = append(updateKVs, bson.E{Key: k, Value: v})
+	// }
+	// updateData := bson.M{
+	// 	"$set": updateKVs,
+	// }
+
+	// r, err := s.Collection.UpdateByID(context.Background(), mongoId, updateData)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// return r, nil
+
+	// 将 map 转换为更新的文档
+	update := bson.M{"$set": kvs}
+
+	// 执行更新操作
+	result, err := s.Collection.UpdateOne(context.Background(), bson.M{"_id": mongoId}, update)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (s TaskMongoSrv) UpdatePushKV(mongoId primitive.ObjectID, key string, value string) (*mongo.UpdateResult, error) {
+	updateData := bson.M{
+		"$push": bson.D{{Key: key, Value: value}},
+	}
+	r, err := s.Collection.UpdateByID(context.Background(), mongoId, updateData)
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
 }

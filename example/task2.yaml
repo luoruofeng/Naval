@@ -1,32 +1,41 @@
-id: task-1
-created_at: "2022-01-01T00:00:00Z"
+id: task-2
 available: true
+wait_seconds: 2
 items:
   - is_running: true
     need_delete: true
-    compose_content: |
-      version: '3'
-      services:
-        web:
-          image: nginx
-          ports:
-            - "8080:80"
-    wait_seconds: 10
+    k8s_yaml_content: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: nginx
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: nginx
+        template:
+          metadata:
+            labels:
+              app: nginx
+          spec:
+            containers:
+            - name: nginx
+              image: nginx:latest
+              ports:
+              - containerPort: 80
   - is_running: true
     need_delete: true
-    image:
-      image_name: nginx
-      version: "latest"
     k8s_yaml_content: |
       apiVersion: v1
-      kind: Pod
+      kind: Service
       metadata:
-        labels:
-          app: nginx
+        name: nginx
       spec:
-        containers:
-          - name: nginx
-            image: nginx
-            ports:
-              - containerPort: 80
-    wait_seconds: 10
+        selector:
+          app: nginx
+        ports:
+          - protocol: TCP
+            port: 80
+            targetPort: 80
+        type: ClusterIP

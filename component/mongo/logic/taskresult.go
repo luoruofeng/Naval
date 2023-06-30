@@ -34,14 +34,14 @@ func NewTaskResultMongoSrv(lc fx.Lifecycle, mongoSrv m.MongoSrv, logger *zap.Log
 
 			if count == 0 {
 				// 如果 TaskResults 不存在则创建
-				err := db.CreateCollection(context.Background(), "TaskResults")
+				err := db.CreateCollection(context.Background(), "task_results")
 				if err != nil {
-					logger.Error("创建collection：TaskResults失败", zap.Error(err))
+					logger.Error("创建collection：task_results失败", zap.Error(err))
 				} else {
-					logger.Info("TaskResults collection 创建成功!")
+					logger.Info("task_results collection 创建成功!")
 				}
 			} else {
-				logger.Info("TaskResults collection 已经存在!")
+				logger.Info("task_results collection 已经存在!")
 
 			}
 			return nil
@@ -54,13 +54,10 @@ func NewTaskResultMongoSrv(lc fx.Lifecycle, mongoSrv m.MongoSrv, logger *zap.Log
 	return result
 }
 
-func (s TaskResultMongoSrv) Save(TaskResult model.TaskResult) error {
+func (s TaskResultMongoSrv) Save(TaskResult model.TaskResult) (*mongo.InsertOneResult, error) {
 	r, err := s.Collection.InsertOne(context.Background(), TaskResult)
 	if err != nil {
-		s.Logger.Error("插入collection：TaskResults失败", zap.Error(err))
-		return err
-	} else {
-		s.Logger.Info("插入collection：TaskResults成功", zap.Any("TaskResult", TaskResult), zap.Any("插入结果", r))
+		return nil, err
 	}
-	return nil
+	return r, nil
 }
