@@ -8,7 +8,7 @@ items:
       apiVersion: apps/v1
       kind: Deployment
       metadata:
-        name: n223
+        name: nginx-deployment
       spec:
         replicas: 1
         selector:
@@ -21,17 +21,24 @@ items:
           spec:
             containers:
             - name: nginx
-              image: nginx:latest
-              imagePullPolicy: Never
+              image: nginx
               ports:
               - containerPort: 80
+              volumeMounts:
+              - name: log-volume
+                mountPath: /var/log/nginx
+            volumes:
+            - name: log-volume
+              persistentVolumeClaim:
+                claimName: nginx-pvc
+
   - is_running: true
     need_delete: true
     k8s_yaml_content: |
       apiVersion: v1
       kind: Service
       metadata:
-        name: n223
+        name: nginx-service
       spec:
         selector:
           app: nginx
@@ -39,4 +46,18 @@ items:
           - protocol: TCP
             port: 80
             targetPort: 80
-        type: ClusterIP
+
+  - is_running: true
+    need_delete: true
+    k8s_yaml_content: |
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: nginx-pvc
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+

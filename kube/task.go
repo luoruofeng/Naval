@@ -21,20 +21,34 @@ import (
 )
 
 type TaskKubeSrv struct {
-	logger        *zap.Logger
-	dc            *dynamic.DynamicClient
-	deploymentRes schema.GroupVersionResource
-	serviceRes    schema.GroupVersionResource
+	logger *zap.Logger
+	dc     *dynamic.DynamicClient
+	// deploymentRes           schema.GroupVersionResource
+	// serviceRes              schema.GroupVersionResource
+	groupVersionResourceMap map[string]schema.GroupVersionResource
+}
+
+func NewGroupVersionResourceMap() map[string]schema.GroupVersionResource {
+	result := make(map[string]schema.GroupVersionResource, 0)
+	deploymentRes := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
+	serviceRes := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "services"}
+	podRes := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
+	persistentVolumeRes := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "persistentvolumes"}
+	persistentVolumeClaimRes := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "persistentvolumeclaims"}
+
+	result["Deployment"] = deploymentRes
+	result["Service"] = serviceRes
+	result["Pod"] = podRes
+	result["PersistentVolume"] = persistentVolumeRes
+	result["PersistentVolumeClaim"] = persistentVolumeClaimRes
+	return result
 }
 
 func NewTaskKubeSrv(lc fx.Lifecycle, logger *zap.Logger, ctx context.Context) *TaskKubeSrv {
 	log := logger
-	deploymentRes := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
-	serviceRes := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "services"}
 	result := TaskKubeSrv{
-		logger:        logger,
-		deploymentRes: deploymentRes,
-		serviceRes:    serviceRes,
+		logger:                  logger,
+		groupVersionResourceMap: NewGroupVersionResourceMap(),
 	}
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
@@ -78,34 +92,32 @@ func NewTaskKubeSrv(lc fx.Lifecycle, logger *zap.Logger, ctx context.Context) *T
 // 创建Deployment
 func (tks TaskKubeSrv) Create(resouceYml string) error {
 	log := tks.logger
-	log.Info("创建resouceYml-转换yaml格式", zap.String("resouceYml", resouceYml))
-	if resource, err := YmlToUnstructured(resouceYml); err != nil {
+	var resouceKind string
+	resource, err := YmlToUnstructured(resouceYml)
+	if err != nil {
 		log.Error("创建resouceYml-转换yaml格式失败", zap.String("resouceYml", resouceYml), zap.Error(err))
 		return err
-	} else {
-		switch resource.GetKind() {
-		case "Deployment":
-			// Create Deployment
-			log.Info("创建deployment-开始", zap.Any("deployment obj", resource.Object), zap.Any("deploymentRes", tks.deploymentRes))
-			result, err := tks.dc.Resource(tks.deploymentRes).Namespace(apiv1.NamespaceDefault).Create(context.TODO(), resource, metav1.CreateOptions{})
+	}
+	resouceKind = resource.GetKind()
+	switch resouceKind {
+	case "Deployment", "Service", "Pod", "PersistentVolume", "PersistentVolumeClaim":
+		// Create resource
+		log.Info("创建resouceYml-转换yaml格式", zap.String("resouceYml", resouceYml))
+		groupVersionResource := tks.groupVersionResourceMap[resouceKind]
+		if resource, err := YmlToUnstructured(resouceYml); err != nil {
+			log.Error("创建resouceYml-转换yaml格式失败", zap.String("resouceYml", resouceYml), zap.Error(err))
+			return err
+		} else {
+			log.Info("创建"+resouceKind+"-开始", zap.Any(resouceKind+" obj", resource.Object), zap.Any(resouceKind+"Res", groupVersionResource))
+			result, err := tks.dc.Resource(groupVersionResource).Namespace(apiv1.NamespaceDefault).Create(context.TODO(), resource, metav1.CreateOptions{})
 			if err != nil {
-				log.Error("创建deployment-失败", zap.Any("deployment", resource), zap.Error(err))
+				log.Error("创建"+resouceKind+"-失败", zap.Any(resouceKind, resource), zap.Error(err))
 				return err
 			}
-			log.Info("创建deployment-成功", zap.String("name", result.GetName()), zap.String("resouceYml", resouceYml))
-		case "Service":
-			// Create Service
-			log.Info("创建service-开始", zap.Any("service obj", resource.Object), zap.Any("serviceRes", tks.serviceRes))
-			result, err := tks.dc.Resource(tks.serviceRes).Namespace(apiv1.NamespaceDefault).Create(context.TODO(), resource, metav1.CreateOptions{})
-			if err != nil {
-				log.Error("创建service-失败", zap.Any("service", resource), zap.Error(err))
-				return err
-			}
-			log.Info("创建service-成功", zap.String("name", result.GetName()), zap.String("resouceYml", resouceYml))
-		default:
-			log.Error("创建resouceYml-不支持的资源类型", zap.String("resouceYml", resouceYml), zap.Any("resource", resource))
-
+			log.Info("创建"+resouceKind+"-成功", zap.String("name", result.GetName()), zap.String("resouceYml", resouceYml))
 		}
+	default:
+		log.Error("创建resouceYml-不支持的资源类型", zap.String("resouceYml", resouceYml), zap.Any("resource", resource))
 	}
 	return nil
 }
@@ -113,41 +125,32 @@ func (tks TaskKubeSrv) Create(resouceYml string) error {
 // 删除Deployment
 func (tks *TaskKubeSrv) Delete(resouceKind string, resouceName string) error {
 	log := tks.logger
+
 	switch resouceKind {
-	case "Deployment":
-		log.Info("删除deployment", zap.Any("deployment name", resouceName))
+	case "Deployment", "Service", "Pod", "PersistentVolume", "PersistentVolumeClaim":
+		groupVersionResource := tks.groupVersionResourceMap[resouceKind]
 		deletePolicy := metav1.DeletePropagationForeground
 		deleteOptions := metav1.DeleteOptions{
 			PropagationPolicy: &deletePolicy,
 		}
-		if err := tks.dc.Resource(tks.deploymentRes).Namespace(apiv1.NamespaceDefault).Delete(context.TODO(), resouceName, deleteOptions); err != nil {
-			log.Error("删除deployment-失败", zap.Error(err))
+		if err := tks.dc.Resource(groupVersionResource).Namespace(apiv1.NamespaceDefault).Delete(context.TODO(), resouceName, deleteOptions); err != nil {
+			log.Error("删除"+resouceKind+"-失败", zap.Error(err))
 			return err
 		}
-		log.Info("删除deployment-成功", zap.String("deployment name", resouceName))
-	case "Service":
-		log.Info("删除service", zap.Any("service name", resouceName))
-		deletePolicy := metav1.DeletePropagationForeground
-		deleteOptions := metav1.DeleteOptions{
-			PropagationPolicy: &deletePolicy,
-		}
-		if err := tks.dc.Resource(tks.serviceRes).Namespace(apiv1.NamespaceDefault).Delete(context.TODO(), resouceName, deleteOptions); err != nil {
-			log.Error("删除service-失败", zap.Error(err))
-			return err
-		}
-		log.Info("删除service-成功", zap.String("service name", resouceName))
+		log.Info("删除"+resouceKind+"-成功", zap.String(resouceKind+" name", resouceName))
 	default:
 		log.Error("删除resouceYml-不支持的资源类型", zap.String("resouceKind", resouceKind), zap.String("resouceName", resouceName))
-		return errors.New(fmt.Sprintf("删除resouceYml-不支持的资源类型 resouceKind: %s, resouceName: %s", resouceKind, resouceName))
+		return fmt.Errorf("删除resouceYml-不支持的资源类型 resouceKind: %s, resouceName: %s", resouceKind, resouceName)
 	}
 	return nil
 }
 
 func (tks *TaskKubeSrv) UpdateDeployReplicasNumber(deploymentName string, n int) (bool, error) {
 	log := tks.logger
+	deploymentRes := tks.groupVersionResourceMap["Deployment"]
 	log.Info("更新deployment的replicas数量-开始", zap.String("deployment name", deploymentName), zap.Int("replicas number", n))
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		result, getErr := tks.dc.Resource(tks.deploymentRes).Namespace(apiv1.NamespaceDefault).Get(context.TODO(), deploymentName, metav1.GetOptions{})
+		result, getErr := tks.dc.Resource(deploymentRes).Namespace(apiv1.NamespaceDefault).Get(context.TODO(), deploymentName, metav1.GetOptions{})
 		if getErr != nil {
 			log.Error("更新deployment的replicas数量-通过deployment名字获取出错", zap.String("deployment name", deploymentName), zap.Error(getErr))
 			return getErr
@@ -157,7 +160,7 @@ func (tks *TaskKubeSrv) UpdateDeployReplicasNumber(deploymentName string, n int)
 			log.Error("更新deployment的replicas数量-设置更新信息错误", zap.String("deployment name", deploymentName), zap.Any("obj", result.Object), zap.Int("replicas number", n), zap.Error(err))
 			return err
 		}
-		_, updateErr := tks.dc.Resource(tks.deploymentRes).Namespace(apiv1.NamespaceDefault).Update(context.TODO(), result, metav1.UpdateOptions{})
+		_, updateErr := tks.dc.Resource(deploymentRes).Namespace(apiv1.NamespaceDefault).Update(context.TODO(), result, metav1.UpdateOptions{})
 		if updateErr != nil {
 			log.Error("更新deployment的replicas数量-更新失败", zap.String("deployment name", deploymentName), zap.Int("replicas number", n), zap.Error(updateErr))
 			return updateErr
@@ -175,9 +178,10 @@ func (tks *TaskKubeSrv) UpdateDeployReplicasNumber(deploymentName string, n int)
 
 func (tks *TaskKubeSrv) UpdateDeployImages(deploymentName string, images ...string) (bool, error) {
 	log := tks.logger
+	deploymentRes := tks.groupVersionResourceMap["Deployment"]
 	log.Info("更新deployment的镜像-开始", zap.String("deployment name", deploymentName), zap.Any("images", images))
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		result, getErr := tks.dc.Resource(tks.deploymentRes).Namespace(apiv1.NamespaceDefault).Get(context.TODO(), deploymentName, metav1.GetOptions{})
+		result, getErr := tks.dc.Resource(deploymentRes).Namespace(apiv1.NamespaceDefault).Get(context.TODO(), deploymentName, metav1.GetOptions{})
 		if getErr != nil {
 			log.Error("更新deployment的镜像-通过deployment名字获取失败", zap.String("deployment name", deploymentName), zap.Error(getErr))
 			return getErr
@@ -206,7 +210,7 @@ func (tks *TaskKubeSrv) UpdateDeployImages(deploymentName string, images ...stri
 			return err
 		}
 
-		_, updateErr := tks.dc.Resource(tks.deploymentRes).Namespace(apiv1.NamespaceDefault).Update(context.TODO(), result, metav1.UpdateOptions{})
+		_, updateErr := tks.dc.Resource(deploymentRes).Namespace(apiv1.NamespaceDefault).Update(context.TODO(), result, metav1.UpdateOptions{})
 		if updateErr != nil {
 			log.Error("更新deployment的镜像-更新出错", zap.String("deployment name", deploymentName), zap.Any("images", images), zap.Error(err))
 			return err

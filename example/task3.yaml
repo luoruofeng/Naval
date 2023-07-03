@@ -1,0 +1,68 @@
+id: task-2
+available: true
+wait_seconds: 2
+items:
+  - is_running: true
+    need_delete: true
+    k8s_yaml_content: |
+      apiVersion: v1
+      kind: PersistentVolume
+      metadata:
+        name: pv-example
+      spec:
+        capacity:
+          storage: 1Gi
+        accessModes:
+          - ReadWriteMany
+        storageClassName: standard
+        hostPath:
+          path: "/data"
+
+  - is_running: true
+    need_delete: true
+    k8s_yaml_content: |
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: pvc-example
+      spec:
+        accessModes:
+          - ReadWriteMany
+        resources:
+          requests:
+            storage: 500Mi
+
+  - is_running: true
+    need_delete: true
+    k8s_yaml_content: |
+      apiVersion: v1
+      kind: Binding
+      metadata:
+        name: pv-binding
+      target:
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        name: pvc-example
+      source:
+        apiVersion: v1
+        kind: PersistentVolume
+        name: pv-example
+
+  - is_running: true
+    need_delete: true
+    k8s_yaml_content: |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: my-pod
+      spec:
+        containers:
+        - name: my-app
+          image: my-image
+          volumeMounts:
+          - name: data-volume
+            mountPath: /data
+        volumes:
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: pvc-example
