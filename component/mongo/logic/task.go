@@ -2,6 +2,7 @@ package logic
 
 import (
 	"context"
+	"time"
 
 	ms "github.com/luoruofeng/Naval/component/mongo"
 	"github.com/luoruofeng/Naval/model"
@@ -131,6 +132,7 @@ func (s TaskMongoSrv) Delete(id primitive.ObjectID) (*mongo.UpdateResult, error)
 	r, err := s.Collection.UpdateByID(context.Background(), id, bson.M{
 		"$set": bson.M{
 			"Available": false,
+			"DeleteAt":  time.Now(),
 		},
 	})
 	if err != nil {

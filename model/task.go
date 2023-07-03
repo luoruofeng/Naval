@@ -42,6 +42,7 @@ type Task struct {
 	CreatedAt        time.Time          `yaml:"created_at,omitempty" bson:"CreatedAt"`                //创建时间
 	IsRunning        bool               `yaml:"is_running,omitempty" bson:"IsRunning"`                //是否正在执行
 	UpdateAt         time.Time          `yaml:"update_at,omitempty" bson:"UpdateAt,omitempty"`        //修改时间
+	DeleteAt         time.Time          `yaml:"delete_at,omitempty" bson:"DeleteAt,omitempty"`        //修改时间
 	Sechedule        string             `yaml:"sechedule,omitempty" bson:"Sechedule"`                 //定时任务表达式,暂时没有开发此功能
 	MongoId          primitive.ObjectID `yaml:"mongo_id,omitempty" bson:"_id,omitempty"`              //mongo id
 	PlanExecAt       time.Time          `yaml:"plan_exec_at,omitempty" bson:"PlanExecAt,omitempty"`   //计划执行时间
