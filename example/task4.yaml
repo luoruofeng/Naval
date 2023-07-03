@@ -1,63 +1,23 @@
-id: task-2
+id: task-1
 available: true
-wait_seconds: 2
+wait_seconds: 1
 items:
   - is_running: true
     need_delete: true
     k8s_yaml_content: |
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: nginx-deployment
-      spec:
-        replicas: 1
-        selector:
-          matchLabels:
-            app: nginx
-        template:
-          metadata:
-            labels:
-              app: nginx
-          spec:
-            containers:
-            - name: nginx
-              image: nginx
-              ports:
-              - containerPort: 80
-              volumeMounts:
-              - name: log-volume
-                mountPath: /var/log/nginx
-            volumes:
-            - name: log-volume
-              persistentVolumeClaim:
-                claimName: nginx-pvc
-
-  - is_running: true
-    need_delete: true
-    k8s_yaml_content: |
       apiVersion: v1
-      kind: Service
+      kind: PersistentVolume
       metadata:
-        name: nginx-service
-      spec:
-        selector:
-          app: nginx
-        ports:
-          - protocol: TCP
-            port: 80
-            targetPort: 80
-
-  - is_running: true
-    need_delete: true
-    k8s_yaml_content: |
-      apiVersion: v1
-      kind: PersistentVolumeClaim
-      metadata:
-        name: nginx-pvc
+        name: nginx-pv
       spec:
         accessModes:
           - ReadWriteOnce
-        resources:
-          requests:
-            storage: 1Gi
+        capacity:
+          storage: 1Gi
+        persistentVolumeReclaimPolicy: Retain
+        storageClassName: ""
+        hostPath:
+          path: /path/to/nginx/logs
+        labels:
+          type: nginx-pv
 

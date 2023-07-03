@@ -23,7 +23,7 @@ func TestHandler(t *testing.T) {
 
 	// 获取项目根目录
 	rootDir := util.GetRootProjPath(cwd)
-	data, err := ioutil.ReadFile(filepath.Join(rootDir, "example/task2.yaml"))
+	data, err := ioutil.ReadFile(filepath.Join(rootDir, "example/task4.yaml"))
 
 	if err != nil {
 		fmt.Println("获取项目根目录失败", err)
