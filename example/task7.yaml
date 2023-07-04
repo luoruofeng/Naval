@@ -1,0 +1,151 @@
+id: task-4
+available: true
+wait_seconds: 4
+items:
+  - is_running: true
+    need_delete: true
+    k8s_yaml_content: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: wordpress-config
+      data:
+        WORDPRESS_DB_HOST: mysql-service
+        WORDPRESS_DB_USER: luoruofeng
+        WORDPRESS_DB_NAME: wp-db
+  - is_running: true
+    need_delete: true
+    k8s_yaml_content: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: mysql-config
+      data:
+        MYSQL_DATABASE: wp-db
+        MYSQL_USER: luoruofeng
+  - is_running: true
+    need_delete: true
+    k8s_yaml_content: |
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: wordpress-secret
+      data:
+        WORDPRESS_DB_PASSWORD: bHVvcnVvZmVuZw==
+  - is_running: true
+    need_delete: true
+    k8s_yaml_content: |
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: mysql-secret
+      data:
+        MYSQL_ROOT_PASSWORD: bHVvcnVvZmVuZw==
+        MYSQL_PASSWORD: bHVvcnVvZmVuZw==
+  - is_running: true
+    need_delete: true
+    k8s_yaml_content: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: wordpress-deployment
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: wordpress
+        template:
+          metadata:
+            labels:
+              app: wordpress
+          spec:
+            containers:
+              - name: wordpress
+                image: wordpress:beta-6.3-php8.2
+                ports:
+                  - containerPort: 80
+                envFrom:
+                  - configMapRef:
+                      name: wordpress-config
+                  - secretRef:
+                      name: wordpress-secret
+  - is_running: true
+    need_delete: true
+    k8s_yaml_content: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: mysql-deployment
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: mysql
+        template:
+          metadata:
+            labels:
+              app: mysql
+          spec:
+            containers:
+              - name: mysql
+                image: mysql:5.7
+                imagePullPolicy: IfNotPresent
+                ports:
+                  - containerPort: 3306
+                envFrom:
+                  - configMapRef:
+                      name: mysql-config
+                  - secretRef:
+                        name: mysql-secret
+                volumeMounts:
+                  - name: mysql-persistent-storage
+                    mountPath: /var/lib/mysql
+            volumes:
+              - name: mysql-persistent-storage
+                persistentVolumeClaim:
+                  claimName: mysql-pvc
+  - is_running: true
+    need_delete: true
+    k8s_yaml_content: |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: wordpress-service
+      spec:
+        selector:
+          app: wordpress
+        type: LoadBalancer
+        ports:
+          - protocol: TCP
+            port: 80
+            targetPort: 80
+
+  - is_running: true
+    need_delete: true
+    k8s_yaml_content: |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: mysql-service
+      spec:
+        selector:
+          app: mysql
+        ports:
+          - protocol: TCP
+            port: 3306
+            targetPort: 3306
+
+  - is_running: true
+    need_delete: true
+    k8s_yaml_content: |         
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: mysql-pvc
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi
+        storageClassName: standard
