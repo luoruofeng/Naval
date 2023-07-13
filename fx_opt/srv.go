@@ -17,9 +17,9 @@ import (
 	"go.uber.org/zap"
 )
 
-func NewFxSrv(configPath string) FxSrv {
+func NewFxSrv(configPaths map[string]string) FxSrv {
 	return FxSrv{
-		configFilePath: configPath,
+		configFilePathMap: configPaths,
 	}
 }
 
@@ -28,8 +28,8 @@ func AddOtherProvide(constructors ...interface{}) fx.Option {
 }
 
 type FxSrv struct {
-	app            *fx.App
-	configFilePath string
+	app               *fx.App
+	configFilePathMap map[string]string
 }
 
 func (f *FxSrv) Start() {
@@ -50,6 +50,15 @@ func (f *FxSrv) Shutddown() {
 
 func (f *FxSrv) Setup() {
 
+	//flag Provide
+	flagProv := fx.Provide(
+		fx.Annotate(
+			func() map[string]string {
+				return f.configFilePathMap
+			},
+		),
+	)
+
 	//handlers Provide
 	handlerProv := fx.Provide(
 		fxhttp.AllAsRoute(handler.NewTaskHandler, handler.NewTaskDelHandler)...,
@@ -64,7 +73,7 @@ func (f *FxSrv) Setup() {
 	cnfProv := fx.Provide(
 		fx.Annotate(
 			func() string {
-				return f.configFilePath
+				return f.configFilePathMap["cnf"]
 			},
 			fx.ResultTags(`name:"configPath"`),
 		),
@@ -98,6 +107,7 @@ func (f *FxSrv) Setup() {
 		}),
 
 		//Provides
+		flagProv,
 		handlerProv,
 		middlewareProv,
 		loggerProv,

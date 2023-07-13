@@ -1,0 +1,9 @@
+{
+    "addr":"mongodb://admin:luoruofeng@localhost:27017/naval",
+    "db_name":"naval",
+    "password":"ruofeng",
+    "username":"luo",
+    "connect_timeout":15,
+    "server_selection_timeout": 60,
+    "socket_timeout": 60
+}

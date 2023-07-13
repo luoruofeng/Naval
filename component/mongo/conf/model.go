@@ -3,13 +3,24 @@ package conf
 import (
 	_ "embed"
 	"encoding/json"
+	"os"
+	"strings"
+
+	"go.uber.org/zap"
 )
 
 //go:embed config.json
 var configStr []byte
 
-func GetConfig() *Config {
+func GetConfig(log *zap.Logger, configPath string) *Config {
+
 	var c *Config
+	if configPath != "" && strings.HasSuffix(configPath, "json") {
+		configStr, _ = os.ReadFile(configPath)
+		log.Info("mongoDB配置文件路径", zap.String("configPath", configPath), zap.Any("configStr", configStr))
+	} else {
+		log.Info("mongoDB配置文件路径", zap.String("configPath", "默认使用编译前的配置文件"), zap.Any("configStr", configStr))
+	}
 	json.Unmarshal(configStr, &c)
 	return c
 }

@@ -6,7 +6,8 @@ import (
 )
 
 func main() {
-	fxSrv := fx_opt.NewFxSrv(cmd.GetConfigFilePath())
+	cpmap := cmd.GetConfigFilePath()
+	fxSrv := fx_opt.NewFxSrv(cpmap)
 	fxSrv.Setup()
 	fxSrv.Start()
 	fxSrv.Shutddown()
