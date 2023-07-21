@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luoruofeng/Naval/conf"
 	"github.com/luoruofeng/Naval/kube"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -19,27 +20,31 @@ import (
 )
 
 type TaskSrv struct {
-	logger             *zap.Logger              // 日志
-	taskResultChan     chan m.TaskResult        // 任务结果通道
-	createTaskChan     chan m.Task              // 任务创建通道
-	execTaskChan       chan m.Task              // 任务执行通道 用于将任务放入pendingTasks后的通知
-	deleteTaskChan     chan string              // 任务删除通道
-	updateTaskChan     chan m.Task              //任务修改通道
-	ctx                context.Context          // 任务调度上下文
-	pendingTasks       []m.Task                 //待执行的任务slice
-	mongoT             mongo.TaskMongoSrv       // mongo任务服务
-	mongoTR            mongo.TaskResultMongoSrv // mongo任务结果服务
-	lastExecTimeSecond int                      // 等待多少秒后开始执行任务
-	lock               sync.Mutex               //用于pendingTasks的锁
-	kubeTaskSrv        *kube.TaskKubeSrv        //k8s服务
+	logger                *zap.Logger              // 日志
+	taskResultChan        chan m.TaskResult        // 任务结果通道
+	createTaskChan        chan m.Task              // 任务创建通道
+	createConvertTaskChan chan m.Task              // 转换任务创建通道
+	execTaskChan          chan m.Task              // 任务执行通道 用于将任务放入pendingTasks后的通知
+	deleteTaskChan        chan string              // 任务删除通道
+	updateTaskChan        chan m.Task              //任务修改通道
+	ctx                   context.Context          // 任务调度上下文
+	pendingTasks          []m.Task                 //待执行的任务slice
+	mongoT                mongo.TaskMongoSrv       // mongo任务服务
+	mongoTR               mongo.TaskResultMongoSrv // mongo任务结果服务
+	lastExecTimeSecond    int                      // 等待多少秒后开始执行任务
+	lock                  sync.Mutex               //用于pendingTasks的锁
+	kubeTaskSrv           *kube.TaskKubeSrv        //k8s服务
+	cnf                   *conf.Config             //项目主配置
 }
 
-func NewTaskSrv(lc fx.Lifecycle, kubeTaskSrv *kube.TaskKubeSrv, logger *zap.Logger, ctx context.Context, taskMongoSrv mongo.TaskMongoSrv, taskResultMongoSrv mongo.TaskResultMongoSrv) *TaskSrv {
+func NewTaskSrv(lc fx.Lifecycle, kubeTaskSrv *kube.TaskKubeSrv, logger *zap.Logger, ctx context.Context, taskMongoSrv mongo.TaskMongoSrv, taskResultMongoSrv mongo.TaskResultMongoSrv, cnf *conf.Config) *TaskSrv {
 	logger.Info("初始化task服务")
 	logger.Info("初始化task结果通道")
 	taskResults := make(chan m.TaskResult)
 	logger.Info("初始化task创建通道")
 	taskCreatedChan := make(chan m.Task)
+	logger.Info("初始化task转换创建通道")
+	taskConvertCreatedChan := make(chan m.Task)
 	logger.Info("初始化task执行通道")
 	deleteTaskChan := make(chan string)
 	logger.Info("初始化task删除通道")
@@ -59,18 +64,20 @@ func NewTaskSrv(lc fx.Lifecycle, kubeTaskSrv *kube.TaskKubeSrv, logger *zap.Logg
 	}
 
 	result := TaskSrv{
-		logger:             logger,
-		taskResultChan:     taskResults,
-		createTaskChan:     taskCreatedChan,
-		execTaskChan:       execTaskChan,
-		mongoT:             taskMongoSrv,
-		mongoTR:            taskResultMongoSrv,
-		ctx:                ctx,
-		pendingTasks:       pendingTasks,
-		lastExecTimeSecond: 1,
-		deleteTaskChan:     deleteTaskChan,
-		updateTaskChan:     updateTaskChan,
-		kubeTaskSrv:        kubeTaskSrv,
+		logger:                logger,
+		taskResultChan:        taskResults,
+		createTaskChan:        taskCreatedChan,
+		createConvertTaskChan: taskConvertCreatedChan,
+		execTaskChan:          execTaskChan,
+		mongoT:                taskMongoSrv,
+		mongoTR:               taskResultMongoSrv,
+		ctx:                   ctx,
+		pendingTasks:          pendingTasks,
+		lastExecTimeSecond:    1,
+		deleteTaskChan:        deleteTaskChan,
+		updateTaskChan:        updateTaskChan,
+		kubeTaskSrv:           kubeTaskSrv,
+		cnf:                   cnf,
 	}
 
 	lc.Append(fx.Hook{
@@ -186,7 +193,7 @@ func (t *TaskSrv) Unmarshal(c []byte) (*m.Task, error) {
 	var task m.Task
 	err := yaml.Unmarshal(c, &task)
 	if err != nil {
-		t.logger.Error(fmt.Sprintf("Could not parse YAML: %v", err), zap.Any("input", c))
+		t.logger.Error(fmt.Sprintf("Could not parse YAML: %v", err), zap.Any("input", string(c)))
 		return nil, err
 	}
 	return &task, nil
@@ -346,17 +353,25 @@ func (ts *TaskSrv) Update(task m.Task) error {
 
 func (ts *TaskSrv) Add(task m.Task) error {
 	log := ts.logger
-	task.IsRunning = false // 设置任务不在运行
-	// 设置任务执行时间
-	task.PlanExecAt = time.Now().Add(time.Duration(task.WaitSeconds) * time.Second)
-	// 设置可用状态
-	task.Available = true
-	// 任务执行次数
-	task.ExtTimes = 0
-	// 设置任务执行状态码
-	task.StateCode = m.Pending
-	// 设置任务创建时间
-	task.CreatedAt = time.Now()
+	if task.Type == m.Create {
+		task.IsRunning = false // 设置任务不在运行
+		// 设置任务执行时间
+		task.PlanExecAt = time.Now().Add(time.Duration(task.WaitSeconds) * time.Second)
+		// 设置可用状态
+		task.Available = true
+		// 任务执行次数
+		task.ExtTimes = 0
+		// 设置任务执行状态码
+		task.StateCode = m.Pending
+		// 设置任务创建时间
+		task.CreatedAt = time.Now()
+	} else if task.Type == m.Convert {
+		task.IsRunning = true // 设置任务在运行
+		// 设置可用状态
+		task.Available = true
+		// 设置任务转化创建时间
+		task.ConvertTime = time.Now()
+	}
 	// mongo保存任务
 	log.Info("保存任务到mongoDB", zap.Any("task", task))
 	if r, err := ts.mongoT.Save(task); err != nil {
@@ -372,8 +387,14 @@ func (ts *TaskSrv) Add(task m.Task) error {
 			log.Info("保存任务-成功", zap.Any("task", task), zap.Any("mongo_id", r.InsertedID))
 		}
 	}
-	ts.createTaskChan <- task
+
+	if task.Type == m.Create {
+		ts.createTaskChan <- task
+	} else if task.Type == m.Convert {
+		ts.createConvertTaskChan <- task
+	}
 	return nil
+
 }
 
 func (ts *TaskSrv) InitExecTaskScheduler() {
@@ -428,6 +449,20 @@ func (ts *TaskSrv) InitEventScheduler() {
 			close(ts.taskResultChan)
 			ts.logger.Info("关闭任务结果通道 taskResults")
 			return
+		case t, ok := <-ts.createConvertTaskChan:
+			if !ok {
+				ts.logger.Info("转换任务-任务创建通道已关闭! createConvertTaskChan", zap.Any("task", t))
+				return
+			} else {
+				ts.logger.Info("转换任务-任务创建通道接受到任务 createConvertTaskChan", zap.Any("task", t))
+				//TODO convert
+				err := Convert(&t, ts.logger, ts.cnf.SaveComposeTmpFolder, ts.cnf.NeedDeleteConvertFolder, ts.mongoT)
+				if err != nil {
+					ts.logger.Error("转换任务-失败", zap.Any("task", t), zap.Error(err))
+				} else {
+					ts.logger.Info("转换任务-成功", zap.Any("task", t))
+				}
+			}
 		case t, ok := <-ts.createTaskChan:
 			if !ok {
 				ts.logger.Info("任务创建通道已关闭! createTaskChan", zap.Any("task", t))

@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	"github.com/luoruofeng/Naval/model"
 	"github.com/luoruofeng/Naval/srv"
 	"go.uber.org/zap"
 )
@@ -56,6 +57,28 @@ func (h *TaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost {
 		message = "创建任务成功"
+		if task.ConvertToK8s {
+			message += "-转换成k8s任务"
+			task.Type = model.Convert
+		} else if task.Items != nil && len(task.Items) > 0 {
+			message += "-k8s执行任务"
+			task.Type = model.Create
+		} else {
+			h.log.Error("创建任务失败-无法分辨任务类型", zap.Any("task_id", task.Id), zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			result := struct {
+				TaskId  string `json:"task_id"`
+				Message string `json:"message"`
+				Error   string `json:"error"`
+			}{
+				TaskId:  task.Id,
+				Message: "Failed to create task",
+				Error:   "创建任务失败-无法分辨任务类型",
+			}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			json.NewEncoder(w).Encode(result)
+			return
+		}
 		err = h.taskSrv.Add(*task)
 		if err != nil {
 			h.log.Error("创建任务失败", zap.Any("task_id", task.Id), zap.Error(err))

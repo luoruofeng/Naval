@@ -1,0 +1,28 @@
+id: task-3
+available: true
+wait_seconds: 0
+convert_to_k8s: true
+kompose:
+  items:
+    - controller_type: 2
+      replicas: 3
+      docker_compose_content: |
+        version: "3"
+
+        services:
+
+        web:
+          image: tuna/docker-counter23
+          ports:
+            - "5000:5000"
+          deploy:
+            replicas: 1
+            restart_policy:
+              condition: any
+          labels:
+            kompose.service.type: NodePort
+
+        redis:
+          image: redis:3.0
+          ports:
+            - "6379"

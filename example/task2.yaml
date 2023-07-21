@@ -2,9 +2,7 @@ id: task-2
 available: true
 wait_seconds: 100
 items:
-  - is_running: true
-    need_delete: true
-    k8s_yaml_content: |
+  - k8s_yaml_content: |
       apiVersion: apps/v1
       kind: Deployment
       metadata:
@@ -25,9 +23,7 @@ items:
               imagePullPolicy: Never
               ports:
               - containerPort: 80
-  - is_running: true
-    need_delete: true
-    k8s_yaml_content: |
+  - k8s_yaml_content: |
       apiVersion: v1
       kind: Service
       metadata:

@@ -7,16 +7,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-type Item struct {
-	IsRunning      bool      `yaml:"is_running" bson:""`                 //是否需要运行
-	NeedDelete     bool      `yaml:"need_delete" bson:""`                //是否需要删除
-	ComposeContent string    `yaml:"compose_content,omitempty" bson:""`  //docker-compose文件内容
-	K8SYamlContent string    `yaml:"k8s_yaml_content,omitempty" bson:""` //k8s yaml文件内容
-	ExtTime        time.Time `yaml:"ExtTime,omitempty" bson:""`          //扩展字段，用于记录任务执行时间
-	ExtDoneTime    time.Time `yaml:"ExtDoneTime,omitempty" bson:""`      //扩展字段，用于记录任务执行完成时间
-	ExtTimes       int       `yaml:"ExtTimes,omitempty" bson:""`         //扩展字段，用于记录任务执行次数
-}
-
 type SC int //任务状态码
 
 const (
@@ -33,25 +23,65 @@ const (
 	ResultFail               //执行失败
 )
 
+// 任务类型
+type TT int
+
+const (
+	Create  TT = iota //创建k8s任务
+	Convert           //转换成k8s任务
+)
+
+// 控制器类型
+type ControllerType int
+
+const (
+	ReplicationController ControllerType = iota //default的controller类型也是deployment
+	DaemonSet
+	Statefulset
+	Helm
+)
+
+// 任务项转换成k8s任务
+type ItemConvert struct {
+	Replicas             *int            `yaml:"replicas,omitempty" bson:"Replicas,omitempty"`                           //副本数
+	DockerComposeContent string          `yaml:"docker_compose_content,omitempty" bson:"DockerComposeContent,omitempty"` //docker-compose文件内容
+	ControllerType       *ControllerType `yaml:"controller_type,omitempty" bson:"ControllerType,omitempty"`              //控制器类型
+}
+
+type Kompose struct {
+	Items []ItemConvert `yaml:"items,omitempty" bson:"Items,omitempty"` //转换任务项
+}
+
+type Item struct {
+	FilePath       string `yaml:"file_path,omitempty" bson:"FilePath,omitempty"`              //文件名
+	K8SYamlContent string `yaml:"k8s_yaml_content,omitempty" bson:"K8SYamlContent,omitempty"` //k8s yaml文件内容
+}
+
 type Task struct {
-	Id               string             `yaml:"id" bson:"Id"`                    //客户传过来的任务id
-	Available        bool               `yaml:"available" bson:"Available"`      //是否可用
-	WaitSeconds      int                `yaml:"wait_seconds" bson:"WaitSeconds"` //等待执行时间
-	Items            []Item             `yaml:"items" bson:"Items"`
-	Uuid             string             `yaml:"uuid,omitempty" bson:"Uuid"`                           //系统生成的每个HTTP请求的uuid
-	CreatedAt        time.Time          `yaml:"created_at,omitempty" bson:"CreatedAt"`                //创建时间
-	IsRunning        bool               `yaml:"is_running,omitempty" bson:"IsRunning"`                //是否正在执行
-	UpdateAt         time.Time          `yaml:"update_at,omitempty" bson:"UpdateAt,omitempty"`        //修改时间
-	DeleteAt         time.Time          `yaml:"delete_at,omitempty" bson:"DeleteAt,omitempty"`        //修改时间
-	Sechedule        string             `yaml:"sechedule,omitempty" bson:"Sechedule"`                 //定时任务表达式,暂时没有开发此功能
-	MongoId          primitive.ObjectID `yaml:"mongo_id,omitempty" bson:"_id,omitempty"`              //mongo id
-	PlanExecAt       time.Time          `yaml:"plan_exec_at,omitempty" bson:"PlanExecAt,omitempty"`   //计划执行时间
-	ExtTime          time.Time          `yaml:"ext_time,omitempty" bson:"ExtTime,omitempty"`          //扩展字段，用于记录任务执行时间
-	ExtDoneTime      time.Time          `yaml:"ext_done_time,omitempty" bson:"ExtDoneTime,omitempty"` //扩展字段，用于记录任务执行完成时间
-	ExtTimes         int                `yaml:"ext_times,omitempty" bson:"ExtTimes,omitempty"`        //扩展字段，用于记录任务执行次数
-	StateCode        SC                 `yaml:"statecode,omitempty" bson:"StateCode"`                 //扩展字段，用于记录任务执行状态码
-	ExecResultIds    []string           `yaml:"exec_result_ids,omitempty" bson:"ExecResultIds,omitempty"`
-	ExecSuccessfully bool               `yaml:"exec_successfully,omitempty" bson:"ExecSuccessfully,omitempty"` //执行任务是否成功的总体结果
+	Id                    string             `yaml:"id" bson:"Id"`                                         //客户传过来的任务id
+	Available             bool               `yaml:"available" bson:"Available"`                           //是否可用
+	WaitSeconds           int                `yaml:"wait_seconds" bson:"WaitSeconds"`                      //等待执行时间
+	Items                 []Item             `yaml:"items" bson:"Items"`                                   //K8s任务项
+	Uuid                  string             `yaml:"uuid,omitempty" bson:"Uuid"`                           //系统生成的每个HTTP请求的uuid
+	CreatedAt             time.Time          `yaml:"created_at,omitempty" bson:"CreatedAt"`                //创建时间
+	IsRunning             bool               `yaml:"is_running,omitempty" bson:"IsRunning"`                //是否正在执行
+	UpdateAt              time.Time          `yaml:"update_at,omitempty" bson:"UpdateAt,omitempty"`        //修改时间
+	DeleteAt              time.Time          `yaml:"delete_at,omitempty" bson:"DeleteAt,omitempty"`        //修改时间
+	Sechedule             string             `yaml:"sechedule,omitempty" bson:"Sechedule"`                 //定时任务表达式,暂时没有开发此功能
+	MongoId               primitive.ObjectID `yaml:"mongo_id,omitempty" bson:"_id,omitempty"`              //mongo id
+	PlanExecAt            time.Time          `yaml:"plan_exec_at,omitempty" bson:"PlanExecAt,omitempty"`   //计划执行时间
+	ExtTime               time.Time          `yaml:"ext_time,omitempty" bson:"ExtTime,omitempty"`          //扩展字段，用于记录任务执行时间
+	ExtDoneTime           time.Time          `yaml:"ext_done_time,omitempty" bson:"ExtDoneTime,omitempty"` //扩展字段，用于记录任务执行完成时间
+	ExtTimes              int                `yaml:"ext_times,omitempty" bson:"ExtTimes,omitempty"`        //扩展字段，用于记录任务执行次数
+	StateCode             SC                 `yaml:"statecode,omitempty" bson:"StateCode"`                 //扩展字段，用于记录任务执行状态码
+	ExecResultIds         []string           `yaml:"exec_result_ids,omitempty" bson:"ExecResultIds,omitempty"`
+	ExecSuccessfully      bool               `yaml:"exec_successfully,omitempty" bson:"ExecSuccessfully,omitempty"`            //执行任务是否成功的总体结果
+	ConvertToK8s          bool               `yaml:"convert_to_k8s,omitempty" bson:"ConvertToK8s,omitempty"`                   //是否转换成k8s任务
+	Kompose               Kompose            `yaml:"kompose,omitempty" bson:"Kompose,omitempty"`                               //转换成k8s任务的内容
+	Type                  TT                 `yaml:"type,omitempty" bson:"Type,omitempty"`                                     //任务类型
+	IsConvertSuccessfully *bool              `yaml:"is_convert_successfully,omitempty" bson:"IsConvertSuccessfully,omitempty"` //是否转换成k8s任务成功
+	ConvertError          string             `yaml:"convert_error,omitempty" bson:"ConvertError,omitempty"`                    //转换成k8s任务的错误信息
+	ConvertTime           time.Time          `yaml:"convert_time,omitempty" bson:"ConvertTime,omitempty"`                      //转换成k8s任务的时间
 }
 
 type TaskResult struct {
@@ -82,18 +112,20 @@ func (task *Task) Verify() error {
 	if task.Id == "" {
 		return fmt.Errorf("任务id不能为空")
 	}
-	if len(task.Items) == 0 {
+	if !task.ConvertToK8s && len(task.Items) == 0 {
 		return fmt.Errorf("任务项不能为空")
 	}
 	if !task.Available {
 		return fmt.Errorf("任务不可用")
 	}
-	for _, item := range task.Items {
-		if item.IsRunning {
-			if item.ComposeContent == "" && item.K8SYamlContent == "" {
-				return fmt.Errorf("任务项ComposeContent和K8SYamlContent不能同时为空")
-			}
-		}
+	if task.IsRunning {
+		return fmt.Errorf("任务正在运行中")
+	}
+	if task.ConvertToK8s && (task.Kompose.Items == nil || len(task.Kompose.Items) == 0) {
+		return fmt.Errorf("任务为转换成k8s任务时，kompose的Items内容不能为空")
+	}
+	if !task.ConvertToK8s && (task.Items == nil || len(task.Items) == 0) {
+		return fmt.Errorf("任务无法确认类型,任务可能为空")
 	}
 	return nil
 }

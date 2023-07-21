@@ -159,20 +159,6 @@ func (s TaskMongoSrv) Update(task model.Task) (*mongo.UpdateResult, error) {
 }
 
 func (s TaskMongoSrv) UpdateKVs(mongoId primitive.ObjectID, kvs map[string]interface{}) (*mongo.UpdateResult, error) {
-	// var updateKVs bson.D
-	// for k, v := range kvs {
-	// 	updateKVs = append(updateKVs, bson.E{Key: k, Value: v})
-	// }
-	// updateData := bson.M{
-	// 	"$set": updateKVs,
-	// }
-
-	// r, err := s.Collection.UpdateByID(context.Background(), mongoId, updateData)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// return r, nil
-
 	// 将 map 转换为更新的文档
 	update := bson.M{"$set": kvs}
 
@@ -185,7 +171,7 @@ func (s TaskMongoSrv) UpdateKVs(mongoId primitive.ObjectID, kvs map[string]inter
 	return result, nil
 }
 
-func (s TaskMongoSrv) UpdatePushKV(mongoId primitive.ObjectID, key string, value string) (*mongo.UpdateResult, error) {
+func (s TaskMongoSrv) UpdatePushKV(mongoId primitive.ObjectID, key string, value interface{}) (*mongo.UpdateResult, error) {
 	updateData := bson.M{
 		"$push": bson.D{{Key: key, Value: value}},
 	}

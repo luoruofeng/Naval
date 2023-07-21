@@ -2,9 +2,7 @@ id: task-1
 available: true
 wait_seconds: 1
 items:
-  - is_running: true
-    need_delete: true
-    k8s_yaml_content: |
+  - k8s_yaml_content: |
       apiVersion: v1
       kind: PersistentVolume
       metadata:

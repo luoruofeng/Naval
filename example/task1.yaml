@@ -1,10 +1,8 @@
-id: task-1
+id: task-11
 available: true
-wait_seconds: 100
+wait_seconds: 1
 items:
-  - is_running: true
-    need_delete: true
-    k8s_yaml_content: |
+  - k8s_yaml_content: |
       apiVersion: apps/v1
       kind: Deployment
       metadata:
@@ -26,9 +24,7 @@ items:
               - containerPort: 80
                 name: http
                 protocol: TCP
-  - is_running: true
-    need_delete: true
-    k8s_yaml_content: |
+  - k8s_yaml_content: |
       apiVersion: apps/v1
       kind: Deployment
       metadata:
@@ -50,9 +46,7 @@ items:
               - containerPort: 80
                 name: http
                 protocol: TCP
-  - is_running: true
-    need_delete: true
-    k8s_yaml_content: |
+  - k8s_yaml_content: |
       apiVersion: apps/v1
       kind: Deployment
       metadata:
@@ -71,9 +65,7 @@ items:
             - name: ubuntu-container
               image: ubuntu
               command: ["sleep", "infinity"]
-  - is_running: true
-    need_delete: true
-    k8s_yaml_content: |
+  - k8s_yaml_content: |
       apiVersion: apps/v1
       kind: Deployment
       metadata:

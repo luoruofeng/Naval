@@ -2,9 +2,7 @@ id: task-3
 available: true
 wait_seconds: 0
 items:
-  - is_running: true
-    need_delete: true
-    k8s_yaml_content: |
+  - k8s_yaml_content: |
       apiVersion: v1
       kind: PersistentVolumeClaim
       metadata:
@@ -16,9 +14,7 @@ items:
           requests:
             storage: 1Gi
 
-  - is_running: true
-    need_delete: true
-    k8s_yaml_content: |
+  - k8s_yaml_content: |
       apiVersion: v1
       kind: Pod
       metadata:
