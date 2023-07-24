@@ -90,7 +90,7 @@ func (s TaskMongoSrv) GetAll() ([]model.Task, error) {
 	return tasks, nil
 }
 
-func (s TaskMongoSrv) GetPendingTask() ([]model.Task, error) {
+func (s TaskMongoSrv) GetPendingTask() ([]*model.Task, error) {
 	collection := s.Collection
 	filter := bson.M{
 		"Available": true,
@@ -101,14 +101,14 @@ func (s TaskMongoSrv) GetPendingTask() ([]model.Task, error) {
 		panic(err)
 	}
 	defer cursor.Close(context.Background())
-	tasks := make([]model.Task, 0)
+	tasks := make([]*model.Task, 0)
 	for cursor.Next(context.Background()) {
 		var task model.Task
 		err = cursor.Decode(&task)
 		if err != nil {
 			return nil, err
 		}
-		tasks = append(tasks, task)
+		tasks = append(tasks, &task)
 	}
 	if err := cursor.Err(); err != nil {
 		return nil, err
@@ -180,4 +180,17 @@ func (s TaskMongoSrv) UpdatePushKV(mongoId primitive.ObjectID, key string, value
 		return nil, err
 	}
 	return r, nil
+}
+
+func (s TaskMongoSrv) UnsetFieldByID(mongoId primitive.ObjectID, field string) error {
+	filter := bson.M{"_id": mongoId}
+	update := bson.M{"$unset": bson.M{field: ""}}
+
+	_, err := s.Collection.UpdateOne(context.TODO(), filter, update)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

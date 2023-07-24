@@ -46,7 +46,7 @@ func NewK8sResourceMetadataMap() map[string]K8sResourceMetadata {
 	configmapRes := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}
 	statefulSetRes := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "statefulsets"}
 	ingressRes := schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}
-	deamonsetRes := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deamonsets"}
+	daemonsetRes := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "daemonsets"}
 	jobRes := schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "jobs"}
 	cronjobRes := schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "cronjobs"}
 	roleRes := schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"}
@@ -66,7 +66,7 @@ func NewK8sResourceMetadataMap() map[string]K8sResourceMetadata {
 	result["ConfigMap"] = K8sResourceMetadata{GroupVersionResource: configmapRes, Namespaced: true, Name: "configmaps", Kind: "ConfigMap"}
 	result["StatefulSet"] = K8sResourceMetadata{GroupVersionResource: statefulSetRes, Namespaced: true, Name: "statefulsets", Kind: "StatefulSet"}
 	result["Ingress"] = K8sResourceMetadata{GroupVersionResource: ingressRes, Namespaced: true, Name: "ingresses", Kind: "Ingress"}
-	result["DeamonSet"] = K8sResourceMetadata{GroupVersionResource: deamonsetRes, Namespaced: true, Name: "deamonsets", Kind: "DeamonSet"}
+	result["DaemonSet"] = K8sResourceMetadata{GroupVersionResource: daemonsetRes, Namespaced: true, Name: "daemonsets", Kind: "DaemonSet"}
 	result["Job"] = K8sResourceMetadata{GroupVersionResource: jobRes, Namespaced: true, Name: "jobs", Kind: "Job"}
 	result["CronJob"] = K8sResourceMetadata{GroupVersionResource: cronjobRes, Namespaced: true, Name: "cronjobs", Kind: "CronJob"}
 	return result
@@ -128,7 +128,7 @@ func (tks TaskKubeSrv) Create(resouceYml string) error {
 	}
 	resouceKind = resource.GetKind()
 	switch resouceKind {
-	case "Deployment", "Service", "Pod", "PersistentVolume", "PersistentVolumeClaim", "Binding", "ConfigMap", "Secret", "StatefulSet", "Ingress", "DeamonSet", "Job", "CronJob", "Role", "RoleBinding", "NetworkPolicy":
+	case "Deployment", "Service", "Pod", "PersistentVolume", "PersistentVolumeClaim", "Binding", "ConfigMap", "Secret", "StatefulSet", "Ingress", "DaemonSet", "Job", "CronJob", "Role", "RoleBinding", "NetworkPolicy":
 		// Create resource
 		log.Info("创建resouceYml-转换yaml格式", zap.String("resouceYml", resouceYml))
 		groupVersionResource := tks.k8sResourceMetadataMap[resouceKind].GroupVersionResource
@@ -164,7 +164,7 @@ func (tks *TaskKubeSrv) Delete(resouceKind string, resouceName string) error {
 	log := tks.logger
 
 	switch resouceKind {
-	case "Deployment", "Service", "Pod", "PersistentVolume", "PersistentVolumeClaim", "Binding", "ConfigMap", "Secret", "StatefulSet", "Ingress", "DeamonSet", "Job", "CronJob", "Role", "RoleBinding", "NetworkPolicy":
+	case "Deployment", "Service", "Pod", "PersistentVolume", "PersistentVolumeClaim", "Binding", "ConfigMap", "Secret", "StatefulSet", "Ingress", "DaemonSet", "Job", "CronJob", "Role", "RoleBinding", "NetworkPolicy":
 		groupVersionResource := tks.k8sResourceMetadataMap[resouceKind].GroupVersionResource
 		namespaced := tks.k8sResourceMetadataMap[resouceKind].Namespaced
 		deletePolicy := metav1.DeletePropagationForeground

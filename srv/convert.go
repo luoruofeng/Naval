@@ -7,9 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kubernetes/kompose/pkg/app"
 	"github.com/kubernetes/kompose/pkg/kobject"
-	mongo "github.com/luoruofeng/Naval/component/mongo/logic"
 	"github.com/luoruofeng/Naval/model"
 	"go.uber.org/zap"
 )
@@ -60,7 +58,6 @@ var (
 )
 
 func init() {
-	fmt.Println("-----------")
 	// Kubernetes only
 	ConvertChart = false             //Create a Helm chart for converted objects
 	ConvertController = "deployment" // `Set the output controller ("deployment"|"daemonSet"|"replicationController")`)
@@ -179,11 +176,11 @@ func CreateDockerComposeFile(log *zap.Logger, i int, dockerComposeContent string
 	return &filePath, nil
 }
 
-// if tmpFolder is not exist, create it
-func CreateTmpFolder(log *zap.Logger, tmpFolder string) error {
-	if _, err := os.Stat(tmpFolder); os.IsNotExist(err) {
-		log.Info("转换任务-创建临时文件夹", zap.String("tmpFolder", tmpFolder))
-		err := os.Mkdir(tmpFolder, 0777)
+// if folder is not exist, create it
+func CreateFolder(log *zap.Logger, folder string) error {
+	if _, err := os.Stat(folder); os.IsNotExist(err) {
+		log.Info("转换任务-创建文件夹", zap.String("folder", folder))
+		err := os.Mkdir(folder, 0777)
 		if err != nil {
 			return err
 		}
@@ -192,19 +189,31 @@ func CreateTmpFolder(log *zap.Logger, tmpFolder string) error {
 }
 
 // Convert docker-compose.yml to k8s yaml
-func Convert(task *model.Task, log *zap.Logger, tmpFolder string, needDeleteConvertFolder bool, mongoSrv mongo.TaskMongoSrv) error {
-	log.Info("转换任务-转化DockerCompose到K8S文件-开始", zap.Any("task", task))
-	err := CreateTmpFolder(log, tmpFolder)
+func (ts *TaskSrv) Convert(task *model.Task) error {
+	log := ts.logger
+	tmpFolder := ts.cnf.SaveComposeTmpFolder
+	needDeleteConvertFolder := ts.cnf.NeedDeleteConvertFolder
+	mongoSrv := ts.mongoT
+	needExecuteImmediately := ts.cnf.NeedExecuteImmediately
+
+	log.Info("转换任务-开始", zap.Any("task", task))
+	// 创建总文件夹
+	err := CreateFolder(log, tmpFolder)
 	if err != nil {
+		log.Error("转换任务-创建总文件夹失败", zap.String("tmpFolder", tmpFolder), zap.Error(err))
 		return err
 	}
 	folderName := filepath.Join(tmpFolder, fmt.Sprintf("%s-%s", task.Id, time.Now().Format("20060102150405")))
-	err = CreateTmpFolder(log, folderName)
+
+	// 创建子文件夹-用于存放yml的文件夹
+	err = CreateFolder(log, folderName)
 	if err != nil {
+		log.Error("转换任务-创建子文件夹-用于存放yml的文件夹失败", zap.String("folderName", folderName), zap.Error(err))
 		return err
 	}
 
 	defer func() {
+		// 删除子文件夹
 		if needDeleteConvertFolder {
 			err := os.RemoveAll(folderName)
 			if err != nil {
@@ -215,42 +224,62 @@ func Convert(task *model.Task, log *zap.Logger, tmpFolder string, needDeleteConv
 		}
 	}()
 
-	composeFilePaths := make([]string, 0)
+	items := make([]model.Item, 0)
 	for i, item := range task.Kompose.Items {
+		// 创建docker-compose.yml文件
 		composeFilePath, err := CreateDockerComposeFile(log, i, item.DockerComposeContent, folderName)
 		if err != nil {
+			log.Error("转换任务-创建docker-compose.yml文件失败", zap.Int("convert item index", i), zap.Error(err))
 			return err
 		}
-		composeFilePaths = append(composeFilePaths, *composeFilePath)
+		log.Info("转换任务-创建docker-compose.yml文件成功", zap.Int("convert item index", i), zap.String("composeFilePath", *composeFilePath))
+
+		// 转换docker-compose.yml文件
 		convertOptions := PreRun(item.ControllerType, item.Replicas, []string{*composeFilePath}, folderName)
 		previousFiles, err := ReadDirAllFiles(folderName) // get previous files
 		if err != nil {
+			log.Error("转换任务-读取文件夹失败", zap.String("folderName", folderName), zap.Error(err))
 			return err
 		}
 		log.Info("转换任务-转换中", zap.Any("convertOptions", convertOptions))
-		app.Convert(convertOptions)
+		// 本来应该直接调用app.Convert(convertOptions)但是这个方法会调用log.Fatalf退出程序，所以这里直接调用自己封装的SrvConvert。
+		err = SrvConvert(convertOptions, log)
+		if err != nil {
+			log.Error("转换任务-转换失败", zap.Any("convertOptions", convertOptions), zap.Error(err))
+			return err
+		}
+
+		// 获取转换后的文件
 		currentFiles, err := ReadDirAllFiles(folderName)
 		if err != nil {
 			return err
 		}
 		newFiles := CompareFiles(previousFiles, currentFiles)
-		// 读取newFiles中的文件内容，保存到mongo
-		items := make([]model.Item, 0)
+
+		// 读取转换后新生成的文件的内容，保存到mongoDB
 		for _, newFile := range newFiles {
 			fileContent, err := os.ReadFile(newFile)
 			if err != nil {
+				log.Error("转换任务-读取转换后新生成的文件的内容失败", zap.String("newFile", newFile), zap.Error(err))
 				return err
 			}
+			log.Info("转换任务-读取转换后新生成的文件的内容成功", zap.String("newFile", newFile), zap.String("fileContent", string(fileContent)))
 			item := model.Item{
 				FilePath:       newFile,
 				K8SYamlContent: string(fileContent),
 			}
 			items = append(items, item)
 		}
-		log.Info("转换任务-转换后保存Items到mongodb中并且ConvertToK8s设置为false", zap.Any("Items-item", item))
-		mongoSrv.UpdateKVs(task.MongoId, map[string]interface{}{"Items": items, "ConvertToK8s": false})
+	}
+	log.Info("转换任务-成功。mongoDB中更新字段:Items:items Type:create ConvertSuccessfully:true StateCode:Pendding", zap.Any("Items", items))
+	mongoSrv.UpdateKVs(task.MongoId, map[string]interface{}{"Items": items, "Type": model.Create, "ConvertSuccessfully": true, "StateCode": model.Pending, "IsRunning": false})
 
-		//TODO save to mongo
+	if needExecuteImmediately {
+		//TODO 执行任务
+		log.Info("转换任务-结束。立即开始执行任务。")
+		ts.Update(*task)
+	} else {
+		log.Info("转换任务-结束。")
 	}
 
 	return nil

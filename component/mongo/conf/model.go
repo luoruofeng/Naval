@@ -17,9 +17,9 @@ func GetConfig(log *zap.Logger, configPath string) *Config {
 	var c *Config
 	if configPath != "" && strings.HasSuffix(configPath, "json") {
 		configStr, _ = os.ReadFile(configPath)
-		log.Info("mongoDB配置文件路径", zap.String("configPath", configPath), zap.Any("configStr", configStr))
+		log.Info("mongoDB配置文件路径", zap.String("configPath", configPath), zap.String("configStr", string(configStr)))
 	} else {
-		log.Info("mongoDB配置文件路径", zap.String("configPath", "默认使用编译前的配置文件"), zap.Any("configStr", configStr))
+		log.Info("mongoDB配置文件路径", zap.String("configPath", "默认使用编译前的配置文件"), zap.String("configStr", string(configStr)))
 	}
 	json.Unmarshal(configStr, &c)
 	return c

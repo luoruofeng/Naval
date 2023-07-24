@@ -9,6 +9,7 @@ import (
 
 	"github.com/luoruofeng/Naval/conf"
 	"github.com/luoruofeng/Naval/kube"
+	"github.com/luoruofeng/Naval/model"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.uber.org/fx"
@@ -28,7 +29,7 @@ type TaskSrv struct {
 	deleteTaskChan        chan string              // 任务删除通道
 	updateTaskChan        chan m.Task              //任务修改通道
 	ctx                   context.Context          // 任务调度上下文
-	pendingTasks          []m.Task                 //待执行的任务slice
+	pendingTasks          []*m.Task                //待执行的任务slice
 	mongoT                mongo.TaskMongoSrv       // mongo任务服务
 	mongoTR               mongo.TaskResultMongoSrv // mongo任务结果服务
 	lastExecTimeSecond    int                      // 等待多少秒后开始执行任务
@@ -52,7 +53,7 @@ func NewTaskSrv(lc fx.Lifecycle, kubeTaskSrv *kube.TaskKubeSrv, logger *zap.Logg
 	logger.Info("初始化task更新通道")
 	execTaskChan := make(chan m.Task)
 	logger.Info("初始化待执行的任务列表")
-	pendingTasks := make([]m.Task, 0)
+	pendingTasks := make([]*m.Task, 0)
 	// 初始化mongo任务数据到pendingTasks
 	pts, err := taskMongoSrv.GetPendingTask()
 	if err != nil {
@@ -60,7 +61,7 @@ func NewTaskSrv(lc fx.Lifecycle, kubeTaskSrv *kube.TaskKubeSrv, logger *zap.Logg
 		return nil
 	} else {
 		pendingTasks = append(pendingTasks, pts...)
-		logger.Info("初始化待执行的任务列表成功", zap.Any("pending_tasks", pendingTasks))
+		logger.Info("初始化待执行的任务列表成功", zap.Any("pending_task_length", len(pendingTasks)), zap.Any("pending_tasks", pendingTasks))
 	}
 
 	result := TaskSrv{
@@ -96,71 +97,18 @@ func NewTaskSrv(lc fx.Lifecycle, kubeTaskSrv *kube.TaskKubeSrv, logger *zap.Logg
 	return &result
 }
 
-func (ts *TaskSrv) walkPendingTasks(p func(i int, t *m.Task) (bool, error)) error {
-	ts.lock.Lock()
-	defer ts.lock.Unlock()
-	for i, task := range ts.pendingTasks {
-		b, err := p(i, &task)
-		if err != nil {
-			return err
-		}
-		if b {
-			return nil
-		}
-	}
-	return nil
-}
-
-func (ts *TaskSrv) addPendingTask(t m.Task) error {
-	err := ts.walkPendingTasks(func(i int, task *m.Task) (bool, error) {
-		if task.Id == t.Id {
-			return true, errors.New("打算新增到pendingtasks中的任务id已经存在")
-		}
-		return false, nil
-	})
-
-	if err != nil {
-		return err
-	}
-
-	ts.lock.Lock()
-	ts.pendingTasks = append(ts.pendingTasks, t)
-	ts.lock.Unlock()
-	return nil
-}
-
-func (ts *TaskSrv) deletePendingTask(id string) error {
-	return ts.walkPendingTasks(func(i int, t *m.Task) (bool, error) {
-		if t.Id == id {
-			ts.pendingTasks = append(ts.pendingTasks[:i], ts.pendingTasks[i+1:]...)
-			return true, nil
-		}
-		return false, nil
-	})
-}
-
-func (ts *TaskSrv) updatePendingTask(task m.Task) error {
-	return ts.walkPendingTasks(func(i int, t *m.Task) (bool, error) {
-		if t.Id == task.Id {
-			ts.pendingTasks[i] = task
-			return true, nil
-		}
-		return false, nil
-	})
-}
-
 // Calculates the latest execution time of the pending task
 func (ts *TaskSrv) CalcLatestExecTime() {
 	log := ts.logger
 	now := time.Now()
 	lastPlanExecTime := now
 	ts.lastExecTimeSecond = 0
-	ts.walkPendingTasks(func(i int, task *m.Task) (bool, error) {
+	ts.WalkPendingTasks(func(i int, task *m.Task) (bool, error) {
 		if task.Available {
 			if task.PlanExecAt.Before(now) ||
 				task.PlanExecAt.Equal(now) { // 计划执行时间小于等于当前时间
-				// 从pendingTasks移除任务
-				ts.pendingTasks = append(ts.pendingTasks[:i], ts.pendingTasks[i+1:]...)
+				// 标记要从pendingTasks移除任务为nil
+				ts.pendingTasks[i] = nil
 				// 执行任务
 				go ts.ExecTask(*task)
 			} else {
@@ -183,6 +131,9 @@ func (ts *TaskSrv) CalcLatestExecTime() {
 		}
 		return false, nil
 	})
+	// 删除pendingTasks中的nil
+
+	ts.DeleteNil()
 	if ts.lastExecTimeSecond == 0 {
 		ts.lastExecTimeSecond = 1
 	}
@@ -197,6 +148,38 @@ func (t *TaskSrv) Unmarshal(c []byte) (*m.Task, error) {
 		return nil, err
 	}
 	return &task, nil
+}
+
+func (ts *TaskSrv) Execete(id string) error {
+	ts.logger.Info("执行任务", zap.Any("id", id))
+	//从mongo中查询任务
+	if t, err := ts.mongoT.FindById(id); err != nil {
+		ts.logger.Error("执行任务-失败-查询任务失败", zap.Any("id", id), zap.Error(err))
+		return err
+	} else {
+		stateCode := t.StateCode
+		if stateCode == m.Running {
+			ts.logger.Info("执行任务-失败-任务正在运行中", zap.Any("id", id), zap.Any("task", t))
+			return fmt.Errorf("执行任务-失败-任务正在运行中 task:%v", t)
+		}
+
+		ts.logger.Info("执行任务-开始执行mongo中的任务", zap.Any("id", id), zap.Any("task", t))
+		if stateCode == m.Pending ||
+			stateCode == m.Stopped ||
+			stateCode == m.Unknown ||
+			t.StateCode == 0 {
+
+			t.WaitSeconds = 0
+			ts.mongoT.UpdateKVs(t.MongoId, map[string]interface{}{"WaitSeconds": 0})
+			// 执行任务
+			err := ts.Update(*t)
+			if err != nil {
+				ts.logger.Error("执行任务失败-更新任务失败", zap.Any("task", t), zap.Error(err))
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (ts *TaskSrv) Delete(id string) error {
@@ -216,26 +199,29 @@ func (ts *TaskSrv) Delete(id string) error {
 			} else {
 				ts.logger.Info("删除任务-删除mongo中的任务成功", zap.Any("task", t), zap.Any("delete_result", r))
 				// 任务从待执行列表移除
-				ts.deletePendingTask(id)
+				ts.DeletePendingTask(id)
 				ts.logger.Info("删除任务-任务从pend_tasks中成功删除", zap.Any("task", t))
 				// 任务从执行通道移除后重新计算最近的执行时间
 				if t.StateCode == m.Pending {
 					ts.deleteTaskChan <- id // 任务放入删除通道
 				}
-				// 删除k8s中的resources
-				go func() {
-					kinds, names, err := kube.GetK8sYamlKindAndName(t)
-					if err != nil {
-						ts.logger.Error("删除任务后删除k8s资源-获取k8s yaml kind和name失败", zap.Any("task", t), zap.Error(err))
-					}
-					for i, kind := range kinds {
-						if err := ts.kubeTaskSrv.Delete(kind, names[i]); err != nil {
-							ts.logger.Error("删除任务后删除k8s资源-删除k8s资源失败", zap.Any("task", t), zap.Error(err))
-						} else {
-							ts.logger.Info("删除任务后删除k8s资源-删除k8s资源成功", zap.Any("task", t), zap.String("kind", kind), zap.String("name", names[i]))
+				// 如果任务的计划执行时间小于当前时间，删除k8s中的resources
+				if time.Now().After(t.PlanExecAt) {
+					// 删除k8s中的resources
+					go func() {
+						kinds, names, err := kube.GetK8sYamlKindAndName(t)
+						if err != nil {
+							ts.logger.Error("删除任务后删除k8s资源-获取k8s yaml kind和name失败", zap.Any("task", t), zap.Error(err))
 						}
-					}
-				}()
+						for i, kind := range kinds {
+							if err := ts.kubeTaskSrv.Delete(kind, names[i]); err != nil {
+								ts.logger.Error("删除任务后删除k8s资源-删除k8s资源失败", zap.Any("task", t), zap.Error(err))
+							} else {
+								ts.logger.Info("删除任务后删除k8s资源-删除k8s资源成功", zap.Any("task", t), zap.String("kind", kind), zap.String("name", names[i]))
+							}
+						}
+					}()
+				}
 				return nil
 			}
 		} else if t.StateCode == m.Running { // 运行中不能删除
@@ -294,7 +280,13 @@ func (ts *TaskSrv) ExecTask(task m.Task) {
 	}
 
 	go func(mongoId primitive.ObjectID, execSuccessfully bool) {
-		if updateResult, err := ts.mongoT.UpdateKVs(mongoId, map[string]interface{}{"ExecSuccessfully": execSuccessfully}); err != nil || updateResult.ModifiedCount < 1 {
+		var sc m.SC
+		if execSuccessfully {
+			sc = m.Executed
+		} else {
+			sc = m.Unknown
+		}
+		if updateResult, err := ts.mongoT.UpdateKVs(mongoId, map[string]interface{}{"ExecSuccessfully": execSuccessfully, "StateCode": sc}); err != nil || updateResult.ModifiedCount < 1 {
 			log.Error("任务执行-更新任务是否成功的总体结果失败 UpdateKVs", zap.Any("mongo id", mongoId), zap.Any("task", task), zap.Bool("execSuccessfully", execSuccessfully), zap.Any("updateResult", updateResult), zap.Error(err))
 		} else {
 			log.Info("任务执行-更新任务是否成功的总体结果成功 UpdateKVs", zap.Any("mongo id", mongoId), zap.Any("task", task), zap.Bool("execSuccessfully", execSuccessfully), zap.Any("updateResult", updateResult))
@@ -319,34 +311,35 @@ func (ts *TaskSrv) ExecTask(task m.Task) {
 func (ts *TaskSrv) Update(task m.Task) error {
 	log := ts.logger
 
-	log.Info("更新任务到mongoDB", zap.Any("task", task))
+	log.Info("更新任务-mongoDB根据id查询task。", zap.Any("task", task))
 	// mongo更新任务前先查询任务确保任务存在并且确定任务状态不为运行中
 	if t, err := ts.mongoT.FindById(task.Id); err != nil {
-		log.Error("更新任务失败-查询任务失败", zap.Any("task", task), zap.Error(err))
+		log.Error("更新任务-失败。查询任务失败。", zap.Any("task-id", task.Id), zap.Error(err))
 		return err
 	} else if !t.Available {
-		log.Info("更新任务失败-任务不可用", zap.Any("task", task))
+		log.Info("更新任务-失败。任务不可用。", zap.Any("task", t))
 		return errors.New("更新任务失败-任务不可用")
 	} else if t.StateCode == m.Running {
-		log.Info("更新任务失败-任务正在运行中不能更新", zap.Any("task", task))
+		log.Info("更新任务-失败。任务正在运行中不能更新。", zap.Any("task", t))
 		return errors.New("更新任务失败-任务正在运行中不能更新")
+	} else if t.StateCode == m.Executed {
+		log.Info("更新任务-失败。任务已经执行完毕。", zap.Any("task", t))
+		return errors.New("更新任务失败-任务已经执行完毕")
 	} else {
-		task.UpdateAt = time.Now()
-		task.StateCode = t.StateCode
-		task.IsRunning = t.IsRunning
-		task.CreatedAt = t.CreatedAt
-		task.Available = t.Available
-		task.MongoId = t.MongoId
-		task.PlanExecAt = time.Now().Add(time.Duration(task.WaitSeconds) * time.Second)
-		if r, err := ts.mongoT.Update(task); err != nil {
-			log.Error("更新任务失败", zap.Any("task", task), zap.Error(err))
+		t.UpdateAt = time.Now()
+		t.PlanExecAt = time.Now().Add(time.Duration(t.WaitSeconds) * time.Second)
+		t.StateCode = m.Pending
+		if r, err := ts.mongoT.Update(*t); err != nil {
+			log.Error("更新任务-失败", zap.Any("task", t), zap.Error(err))
 			return err
 		} else {
-			log.Info("更新任务成功", zap.Any("task", task), zap.Any("result", r))
+			log.Info("更新任务-成功", zap.Any("task", t), zap.Any("result", r))
 		}
-		ts.updateTaskChan <- task
-		return nil
 
+		go func() {
+			ts.updateTaskChan <- *t
+		}()
+		return nil
 	}
 
 }
@@ -371,30 +364,72 @@ func (ts *TaskSrv) Add(task m.Task) error {
 		task.Available = true
 		// 设置任务转化创建时间
 		task.ConvertTime = time.Now()
+		// 设置任务创建时间
+		task.CreatedAt = time.Now()
+		// 设置任务执行状态码
+		task.StateCode = m.Running
+		// 任务执行次数
+		task.ExtTimes = 0
+		// 设置任务转换次数
+		task.ConvertTimes = 1
 	}
 	// mongo保存任务
-	log.Info("保存任务到mongoDB", zap.Any("task", task))
+	log.Info("创建任务-保存mongoDB", zap.Any("task", task))
 	if r, err := ts.mongoT.Save(task); err != nil {
-		log.Error("保存任务-失败", zap.Any("task", task), zap.Error(err))
+		log.Error("创建任务-保存到mongoDB失败", zap.Any("task", task), zap.Error(err))
 		return err
 	} else {
 		mongoId, ok := r.InsertedID.(primitive.ObjectID)
 		if !ok {
-			log.Info("保存任务-成功 mongo Id转换失败", zap.Any("task", task), zap.Any("mongo_id", r.InsertedID))
-			return errors.New("保存任务成功-mongoId转换失败")
+			log.Info("创建任务-mongo Id转换失败", zap.Any("task", task), zap.Any("mongo_id", r.InsertedID))
+			return errors.New("创建任务-mongoId转换失败")
 		} else {
 			task.MongoId = mongoId
-			log.Info("保存任务-成功", zap.Any("task", task), zap.Any("mongo_id", r.InsertedID))
+			log.Info("创建任务-成功", zap.Any("task", task), zap.Any("mongo_id", r.InsertedID))
 		}
 	}
 
 	if task.Type == m.Create {
+		// 任务放入创建通道
 		ts.createTaskChan <- task
 	} else if task.Type == m.Convert {
-		ts.createConvertTaskChan <- task
+		ts.StartConvert(task)
 	}
 	return nil
+}
 
+func (ts *TaskSrv) StartConvert(task m.Task) error {
+	if ts.cnf.AsyncConvert {
+		// 异步转换
+		ts.createConvertTaskChan <- task
+	} else {
+		// 同步转换
+		return ts.TaskConvert(task)
+	}
+	return nil
+}
+
+func (ts *TaskSrv) UpdateConvert(t m.Task) error {
+	//从mongo中查询任务
+	if task, err := ts.mongoT.FindById(t.Id); err != nil {
+		ts.logger.Error("更新任务-根据Id没有查询到任务", zap.Any("task", t), zap.Error(err))
+		return err
+	} else if task.StateCode == m.Executed {
+		ts.logger.Error("更新任务-失败-任务已经执行完毕", zap.Any("task", t), zap.Error(errors.New("任务已经执行完毕不能再次更改")))
+		return nil
+	} else {
+		t.MongoId = task.MongoId
+		t.Items = nil
+		t.ConvertTimes = task.ConvertTimes + 1
+		t.ConvertError = ""
+		_, err := ts.mongoT.Update(t)
+		if err != nil {
+			ts.logger.Error("更新任务-更新任务失败", zap.Any("task", t), zap.Error(err))
+			return err
+		} else {
+			return ts.StartConvert(t)
+		}
+	}
 }
 
 func (ts *TaskSrv) InitExecTaskScheduler() {
@@ -437,6 +472,23 @@ func (ts *TaskSrv) InitExecTaskScheduler() {
 	}
 }
 
+func (ts *TaskSrv) TaskConvert(t m.Task) error {
+	ts.logger.Info("转换任务-开始", zap.Any("task", t))
+	err := ts.Convert(&t)
+	if err != nil {
+		ts.logger.Error("转换任务-失败", zap.Any("task", t), zap.Error(err))
+
+		// 更新任务状态为停止
+		ts.mongoT.UpdateKVs(t.MongoId, map[string]interface{}{"ConvertError": err.Error(), "ConvertSuccessfully": false, "StateCode": model.Wrong, "IsRunning": false})
+		// 删除任务中的items
+		ts.mongoT.UnsetFieldByID(t.MongoId, "Items")
+		return err
+	} else {
+		ts.logger.Info("转换任务-成功", zap.Any("task", t))
+	}
+	return nil
+}
+
 func (ts *TaskSrv) InitEventScheduler() {
 	ts.logger.Info("初始化事件调度器 InitEventScheduler")
 	defer ts.logger.Info("退出 InitEventScheduler")
@@ -448,20 +500,17 @@ func (ts *TaskSrv) InitEventScheduler() {
 			ts.logger.Info("关闭任务创建通道 createTaskChan")
 			close(ts.taskResultChan)
 			ts.logger.Info("关闭任务结果通道 taskResults")
+			close(ts.createConvertTaskChan)
+			ts.logger.Info("关闭转换任务创建通道 createConvertTaskChan")
+			close(ts.updateTaskChan)
+			ts.logger.Info("关闭任务更新通道 updateTaskChan")
 			return
 		case t, ok := <-ts.createConvertTaskChan:
 			if !ok {
 				ts.logger.Info("转换任务-任务创建通道已关闭! createConvertTaskChan", zap.Any("task", t))
 				return
 			} else {
-				ts.logger.Info("转换任务-任务创建通道接受到任务 createConvertTaskChan", zap.Any("task", t))
-				//TODO convert
-				err := Convert(&t, ts.logger, ts.cnf.SaveComposeTmpFolder, ts.cnf.NeedDeleteConvertFolder, ts.mongoT)
-				if err != nil {
-					ts.logger.Error("转换任务-失败", zap.Any("task", t), zap.Error(err))
-				} else {
-					ts.logger.Info("转换任务-成功", zap.Any("task", t))
-				}
+				ts.TaskConvert(t)
 			}
 		case t, ok := <-ts.createTaskChan:
 			if !ok {
@@ -479,7 +528,7 @@ func (ts *TaskSrv) InitEventScheduler() {
 							ts.logger.Info("任务稍后执行-任务计划执行时间大于当前时间", zap.Any("task", t))
 						}
 						ts.logger.Info("创建任务-待执行列表添加任务", zap.Any("pending_tasks", ts.pendingTasks))
-						err := ts.addPendingTask(t)
+						err := ts.AddPendingTask(t)
 						if err != nil {
 							ts.logger.Error("创建任务-任务无法添加到pendingtasks中", zap.Error(err))
 						} else {
@@ -493,8 +542,9 @@ func (ts *TaskSrv) InitEventScheduler() {
 				}
 			}
 		case t, ok := <-ts.updateTaskChan:
+			//TODO没有进来
 			if !ok {
-				ts.logger.Info("任务更新通道已关闭! updateTaskChan", zap.Any("task", t))
+				ts.logger.Info("任务更新通道-已关闭! updateTaskChan", zap.Any("task", t))
 				return
 			} else {
 				ts.logger.Info("任务更新通道接受到任务 updateTaskChan", zap.Any("task", t))
@@ -503,22 +553,20 @@ func (ts *TaskSrv) InitEventScheduler() {
 						// 任务放入待执行列表
 						if t.PlanExecAt.Before(time.Now()) ||
 							t.PlanExecAt.Equal(time.Now()) { // 计划执行时间小于等于当前时间
-							ts.logger.Info("更新任务立即执行-任务计划执行时间小于等于当前时间 任务进入待执行列表", zap.Any("task", t))
+							ts.logger.Info("更新任务-立即执行-任务计划执行时间小于等于当前时间 任务进入待执行列表", zap.Any("task", t))
 						} else {
-							ts.logger.Info("更新任务稍后执行-任务计划执行时间大于当前时间", zap.Any("task", t))
+							ts.logger.Info("更新任务-稍后执行-任务计划执行时间大于当前时间", zap.Any("task", t))
 						}
-						ts.logger.Info("更新任务添加到待执行列表添加任务", zap.Any("pending_tasks", ts.pendingTasks))
-						err := ts.addPendingTask(t)
+						ts.logger.Info("更新任务-添加到待执行列表添加任务", zap.Any("pending_tasks", ts.pendingTasks))
+						err := ts.AddPendingTask(t)
 						if err != nil {
 							ts.logger.Error("更新任务-任务再pendingtasks中已经存在", zap.Error(err))
-							ts.deletePendingTask(t.Id)
+							ts.DeletePendingTask(t.Id)
 							ts.logger.Info("更新任务-删除pendingtasks中已经存在的任务", zap.Any("id", t.Id))
-							ts.addPendingTask(t)
+							ts.AddPendingTask(t)
 							ts.logger.Info("更新任务-再次将任务放入pendingtasks", zap.Any("id", t.Id))
-							ts.execTaskChan <- t // 任务放入执行通道
-						} else {
-							ts.execTaskChan <- t // 任务放入执行通道
 						}
+						ts.execTaskChan <- t // 任务放入执行通道
 					} else {
 						ts.logger.Info("更新任务-任务不可用", zap.Any("task", t))
 					}

@@ -12,4 +12,6 @@ type Config struct {
 	K8sApiServer            string `json:"k8s_api_server"`
 	SaveComposeTmpFolder    string `json:"save_compose_tmp_folder"`
 	NeedDeleteConvertFolder bool   `json:"need_delete_convert_folder"`
+	NeedExecuteImmediately  bool   `json:"need_execute_immediately"`
+	AsyncConvert            bool   `json:"async_convert"`
 }

@@ -23,7 +23,7 @@ func TestUpdate(t *testing.T) {
 
 	// 获取项目根目录
 	rootDir := util.GetRootProjPath(cwd)
-	data, err := ioutil.ReadFile(filepath.Join(rootDir, "example/task1.yaml"))
+	data, err := ioutil.ReadFile(filepath.Join(rootDir, "example/docker-compose/task2.yaml"))
 
 	if err != nil {
 		fmt.Println("获取项目根目录失败", err)

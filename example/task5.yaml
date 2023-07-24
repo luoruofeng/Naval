@@ -1,5 +1,6 @@
 id: task-7
 available: true
+type: 1
 wait_seconds: 0
 items:
   - k8s_yaml_content: |

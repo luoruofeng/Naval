@@ -1,6 +1,7 @@
-id: task-11
+id: task-1
 available: true
 wait_seconds: 1
+type: 1
 items:
   - k8s_yaml_content: |
       apiVersion: apps/v1
@@ -24,69 +25,3 @@ items:
               - containerPort: 80
                 name: http
                 protocol: TCP
-  - k8s_yaml_content: |
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: demo-deployment2
-      spec:
-        replicas: 1
-        selector:
-          matchLabels:
-            app: demo2
-        template:
-          metadata:
-            labels:
-              app: demo2
-          spec:
-            containers:
-            - image: nginx:1.14
-              name: web
-              ports:
-              - containerPort: 80
-                name: http
-                protocol: TCP
-  - k8s_yaml_content: |
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: ubuntu-deployment
-      spec:
-        replicas: 1
-        selector:
-          matchLabels:
-            app: ubuntu
-        template:
-          metadata:
-            labels:
-              app: ubuntu
-          spec:
-            containers:
-            - name: ubuntu-container
-              image: ubuntu
-              command: ["sleep", "infinity"]
-  - k8s_yaml_content: |
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: mysql
-        labels:
-          app: mysql
-      spec:
-        replicas: 1
-        selector:
-          matchLabels:
-            app: mysql
-        template:
-          metadata:
-            labels:
-              app: mysql
-          spec:
-            containers:
-            - name: mysql
-              image: mysql:latest
-              ports:
-              - containerPort: 3306
-              env:
-              - name: MYSQL_ROOT_PASSWORD
-                value: your_password
