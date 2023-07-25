@@ -1,7 +1,7 @@
 id: task-2
 available: true
 type: 2
-wait_seconds: 101
+wait_seconds: 1
 kompose:
   items:
     - docker_compose_content: |

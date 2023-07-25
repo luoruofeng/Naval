@@ -110,7 +110,7 @@ func (ts *TaskSrv) CalcLatestExecTime() {
 				// 标记要从pendingTasks移除任务为nil
 				ts.pendingTasks[i] = nil
 				// 执行任务
-				go ts.ExecTask(*task)
+				go ts.ExecPenddingTask(*task)
 			} else {
 				if lastPlanExecTime.Equal(now) {
 					// 第一次计算
@@ -182,6 +182,22 @@ func (ts *TaskSrv) Execete(id string) error {
 	return nil
 }
 
+// 删除k8s中的resources
+func (ts *TaskSrv) DeleteResource(t *model.Task) []error {
+	kinds, names, err := kube.GetK8sYamlKindAndName(t)
+	if err != nil {
+		ts.logger.Error("删除任务后删除k8s资源-获取k8s yaml kind和name失败", zap.Any("task", t), zap.Error(err))
+	}
+	var errs []error = make([]error, 0)
+	for i, kind := range kinds {
+		if err := ts.kubeTaskSrv.Delete(kind, names[i]); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errs
+}
+
+// 删除任务中的items
 func (ts *TaskSrv) Delete(id string) error {
 	ts.logger.Info("删除任务", zap.Any("id", id))
 	if t, err := ts.mongoT.FindById(id); err != nil {
@@ -189,9 +205,7 @@ func (ts *TaskSrv) Delete(id string) error {
 		return err
 	} else {
 		ts.logger.Info("删除任务-开始删除mongo中的任务", zap.Any("id", id), zap.Any("task", t))
-		if t.StateCode == m.Pending ||
-			t.StateCode == m.Stopped ||
-			t.StateCode == m.Unknown {
+		if t.StateCode != m.Running {
 			// mongo删除任务
 			if r, err := ts.mongoT.Delete(t.MongoId); err != nil {
 				ts.logger.Error("删除任务失败-删除mongo中的任务失败", zap.Any("task", t), zap.Error(err))
@@ -209,17 +223,7 @@ func (ts *TaskSrv) Delete(id string) error {
 				if time.Now().After(t.PlanExecAt) {
 					// 删除k8s中的resources
 					go func() {
-						kinds, names, err := kube.GetK8sYamlKindAndName(t)
-						if err != nil {
-							ts.logger.Error("删除任务后删除k8s资源-获取k8s yaml kind和name失败", zap.Any("task", t), zap.Error(err))
-						}
-						for i, kind := range kinds {
-							if err := ts.kubeTaskSrv.Delete(kind, names[i]); err != nil {
-								ts.logger.Error("删除任务后删除k8s资源-删除k8s资源失败", zap.Any("task", t), zap.Error(err))
-							} else {
-								ts.logger.Info("删除任务后删除k8s资源-删除k8s资源成功", zap.Any("task", t), zap.String("kind", kind), zap.String("name", names[i]))
-							}
-						}
+						ts.DeleteResource(t)
 					}()
 				}
 				return nil
@@ -232,7 +236,7 @@ func (ts *TaskSrv) Delete(id string) error {
 	}
 }
 
-func (ts *TaskSrv) ExecTask(task m.Task) {
+func (ts *TaskSrv) ExecPenddingTask(task m.Task) {
 	log := ts.logger
 	// 更新任务状态为正在执行
 	task.StateCode = m.Running
@@ -251,17 +255,21 @@ func (ts *TaskSrv) ExecTask(task m.Task) {
 	log.Info("任务执行-开始", zap.Any("task", task))
 	// 执行任务
 	var execSuccessfully bool = true //任务是否成功的总体结果
+	// 任务执行项
 	for i, item := range task.Items {
 		var tr m.TaskResult
 		if item.K8SYamlContent != "" {
+			// 创建k8s资源
 			if err := ts.kubeTaskSrv.Create(item.K8SYamlContent); err != nil {
 				log.Error("任务执行项-失败", zap.String("item.K8SYamlContent", item.K8SYamlContent), zap.Any("task", task), zap.Error(err))
 				tr = m.NewTaskResult(task.Id, i, err.Error(), "", m.ResultFail)
 				execSuccessfully = false
+				break
 			} else {
 				log.Info("任务执行项-成功", zap.Any("task", task))
 				tr = m.NewTaskResult(task.Id, i, "", "任务执行项-成功", m.ResultSuccess)
 			}
+			// 更新mongoDB任务执行项的结果
 			insertR, err := ts.mongoTR.Save(tr)
 			if err != nil || insertR.InsertedID == nil {
 				log.Error("任务执行项-保存任务结果失败 Save", zap.Any("task result", tr), zap.Error(err))
@@ -269,6 +277,7 @@ func (ts *TaskSrv) ExecTask(task m.Task) {
 			} else {
 				log.Info("任务执行项-保存任务结果成功 Save", zap.Any("task result", tr), zap.Any("mongo id", insertR.InsertedID))
 			}
+			// 更新mongoDB任务执行项的结果
 			go func(mongoId primitive.ObjectID, trid string) {
 				if updateResult, err := ts.mongoT.UpdatePushKV(mongoId, "ExecResultIds", trid); err != nil || updateResult.ModifiedCount < 1 {
 					log.Error("任务执行项-更新任务结果失败 UpdatePushKV", zap.Any("mongo id", mongoId), zap.String("task result id", trid), zap.Any("updateResult", updateResult), zap.Error(err))
@@ -279,19 +288,24 @@ func (ts *TaskSrv) ExecTask(task m.Task) {
 		}
 	}
 
-	go func(mongoId primitive.ObjectID, execSuccessfully bool) {
+	go func(task *model.Task, mongoId primitive.ObjectID, execSuccessfully bool) {
 		var sc m.SC
 		if execSuccessfully {
 			sc = m.Executed
 		} else {
-			sc = m.Unknown
+			sc = m.ExecuteFailed
+			// 删除k8s中的resources
+			go func() {
+				ts.DeleteResource(task)
+			}()
 		}
+		// 更新mongoDB任务是否成功的总体结果
 		if updateResult, err := ts.mongoT.UpdateKVs(mongoId, map[string]interface{}{"ExecSuccessfully": execSuccessfully, "StateCode": sc}); err != nil || updateResult.ModifiedCount < 1 {
 			log.Error("任务执行-更新任务是否成功的总体结果失败 UpdateKVs", zap.Any("mongo id", mongoId), zap.Any("task", task), zap.Bool("execSuccessfully", execSuccessfully), zap.Any("updateResult", updateResult), zap.Error(err))
 		} else {
 			log.Info("任务执行-更新任务是否成功的总体结果成功 UpdateKVs", zap.Any("mongo id", mongoId), zap.Any("task", task), zap.Bool("execSuccessfully", execSuccessfully), zap.Any("updateResult", updateResult))
 		}
-	}(task.MongoId, execSuccessfully)
+	}(&task, task.MongoId, execSuccessfully)
 
 	// 更新任务状态为停止
 	task.StateCode = m.Stopped

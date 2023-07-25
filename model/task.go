@@ -10,12 +10,13 @@ import (
 type SC int //任务状态码
 
 const (
-	Unknown  SC = 1 + iota //未知
-	Pending                //等待执行
-	Running                //正在执行
-	Stopped                //已停止
-	Wrong                  //convert错误
-	Executed               //已执行
+	Unknown       SC = 1 + iota //未知
+	Pending                     //等待执行
+	Running                     //正在执行
+	Stopped                     //已停止
+	Wrong                       //convert错误
+	Executed                    //已执行
+	ExecuteFailed               //执行失败
 )
 
 type RSC int //任务执行结果状态码
