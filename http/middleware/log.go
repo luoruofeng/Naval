@@ -41,6 +41,12 @@ func (l *LogMiddleware) Middleware(next http.Handler) http.Handler {
 		for k, v := range recorder.Header() {
 			w.Header()[k] = v
 		}
+		w.WriteHeader(recorder.Code)
+		_, err := w.Write(recorder.Body.Bytes())
+		if err != nil {
+			// 处理错误
+			l.logger.Error("写入响应失败", zap.Error(err))
+		}
 		l.logger.Info("客户端发起的HTTP请求结束",
 			zap.String("uuid", uuid),
 			zap.Int("status", recorder.Code),

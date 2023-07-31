@@ -1,7 +1,7 @@
 id: task-2
 available: true
 type: 1
-wait_seconds: 1
+wait_seconds: 100
 items:
   - k8s_yaml_content: |
       apiVersion: apps/v1
