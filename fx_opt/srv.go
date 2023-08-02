@@ -64,12 +64,15 @@ func (f *FxSrv) Setup() {
 		fxhttp.AllAsRoute(
 			handler.NewTaskHandler,
 			handler.NewTaskDelHandler,
+			handler.NewTasksHandler,
 			handler.NewTaskExecHandler)...,
 	)
 
 	//middlewares Provide
 	middlewareProv := fx.Provide(
-		fxhttp.AllAsMiddleware(middleware.NewLogMiddleware)...,
+		fxhttp.AllAsMiddleware(
+			middleware.NewLogMiddleware,
+			middleware.NewCORSMiddleware)...,
 	)
 
 	//config Provide

@@ -4,45 +4,24 @@ clusters:
     certificate-authority: C:\Users\luoru\.minikube\ca.crt
     extensions:
     - extension:
-        last-update: Tue, 27 Jun 2023 14:05:15 CST
+        last-update: Tue, 01 Aug 2023 15:38:56 CST
         provider: minikube.sigs.k8s.io
         version: v1.30.1
       name: cluster_info
-    server: https://127.0.0.1:32299
+    server: https://127.0.0.1:37610
   name: minikube
-- cluster:
-    certificate-authority: C:\Users\luoru\.minikube\ca.crt
-    extensions:
-    - extension:
-        last-update: Thu, 08 Jun 2023 10:26:24 CST
-        provider: minikube.sigs.k8s.io
-        version: v1.30.1
-      name: cluster_info
-    server: https://127.0.0.1:26957
-  name: multinode-demo
 contexts:
 - context:
     cluster: minikube
     extensions:
     - extension:
-        last-update: Tue, 27 Jun 2023 14:05:15 CST
+        last-update: Tue, 01 Aug 2023 15:38:56 CST
         provider: minikube.sigs.k8s.io
         version: v1.30.1
       name: context_info
     namespace: default
     user: minikube
   name: minikube
-- context:
-    cluster: multinode-demo
-    extensions:
-    - extension:
-        last-update: Thu, 08 Jun 2023 10:26:24 CST
-        provider: minikube.sigs.k8s.io
-        version: v1.30.1
-      name: context_info
-    namespace: default
-    user: multinode-demo
-  name: multinode-demo
 current-context: minikube
 kind: Config
 preferences: {}
@@ -51,7 +30,3 @@ users:
   user:
     client-certificate: C:\Users\luoru\.minikube\profiles\minikube\client.crt
     client-key: C:\Users\luoru\.minikube\profiles\minikube\client.key
-- name: multinode-demo
-  user:
-    client-certificate: C:\Users\luoru\.minikube\profiles\multinode-demo\client.crt
-    client-key: C:\Users\luoru\.minikube\profiles\multinode-demo\client.key

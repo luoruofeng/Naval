@@ -23,7 +23,6 @@ func NewTaskExecHandler(log *zap.Logger, taskSrv *srv.TaskSrv) *TaskExecHandler 
 }
 
 func (h *TaskExecHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return

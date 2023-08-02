@@ -140,6 +140,10 @@ func (ts *TaskSrv) CalcLatestExecTime() {
 	log.Info("计算-最近的执行时间 ", zap.Int("lastExecTimeSecond", ts.lastExecTimeSecond), zap.Any("lastPlanExecTime", lastPlanExecTime), zap.Any("pending_tasks", ts.pendingTasks))
 }
 
+func (t *TaskSrv) GetAllTask() ([]m.Task, error) {
+	return t.mongoT.GetAll()
+}
+
 func (t *TaskSrv) Unmarshal(c []byte) (*m.Task, error) {
 	var task m.Task
 	err := yaml.Unmarshal(c, &task)
@@ -430,7 +434,7 @@ func (ts *TaskSrv) UpdateConvert(t m.Task) error {
 		return err
 	} else if task.StateCode == m.Executed {
 		ts.logger.Error("更新任务-失败-任务已经执行完毕", zap.Any("task", t), zap.Error(errors.New("任务已经执行完毕不能再次更改")))
-		return nil
+		return fmt.Errorf("更新任务-失败-任务已经执行完毕 task:%v", t)
 	} else {
 		t.MongoId = task.MongoId
 		t.Items = nil

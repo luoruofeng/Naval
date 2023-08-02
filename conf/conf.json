@@ -10,6 +10,6 @@
     "k8s_api_server":"127.0.0.1",
     "save_compose_tmp_folder":"C:/Users/luoru/Desktop/Naval/tmp/",
     "need_delete_convert_folder":false,
-    "need_execute_immediately":true,
+    "need_execute_immediately":false,
     "async_convert":true
 }
