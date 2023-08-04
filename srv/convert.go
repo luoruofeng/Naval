@@ -196,7 +196,7 @@ func (ts *TaskSrv) Convert(task *model.Task) error {
 	mongoSrv := ts.mongoT
 	needExecuteImmediately := ts.cnf.NeedExecuteImmediately
 
-	log.Info("转换任务-开始", zap.Any("task", task))
+	log.Info("转换任务-开始", zap.String("task.id", task.Id))
 	// 创建总文件夹
 	err := CreateFolder(log, tmpFolder)
 	if err != nil {

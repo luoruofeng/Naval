@@ -118,25 +118,33 @@ func NewTaskKubeSrv(lc fx.Lifecycle, logger *zap.Logger, ctx context.Context) *T
 }
 
 // 创建Deployment
-func (tks TaskKubeSrv) Create(resouceYml string) error {
+func (tks TaskKubeSrv) Create(resouceYml string) ([]struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+}, error) {
+	successfulRes := make([]struct {
+		Kind string `json:"kind"`
+		Name string `json:"name"`
+	}, 0)
 	log := tks.logger
 	var resouceKind string
 	// 转换yaml格式到unstructured.Unstructured对象
 	resource, err := YmlToUnstructured(resouceYml)
 	if err != nil {
 		log.Error("创建k8s资源-转换yaml格式失败", zap.String("resouceYml", resouceYml), zap.Error(err))
-		return err
+		return successfulRes, err
 	}
 	resouceKind = resource.GetKind()
 	switch resouceKind {
 	case "Deployment", "Service", "Pod", "PersistentVolume", "PersistentVolumeClaim", "Binding", "ConfigMap", "Secret", "StatefulSet", "Ingress", "DaemonSet", "Job", "CronJob", "Role", "RoleBinding", "NetworkPolicy":
+
 		// 创建资源
 		log.Info("创建k8s资源-转换yaml格式", zap.String("resouceYml", resouceYml))
 		groupVersionResource := tks.k8sResourceMetadataMap[resouceKind].GroupVersionResource
 		namespaced := tks.k8sResourceMetadataMap[resouceKind].Namespaced
 		if resource, err := YmlToUnstructured(resouceYml); err != nil {
 			log.Error("创建k8s资源-转换yaml格式失败", zap.String("resouceYml", resouceYml), zap.Error(err))
-			return err
+			return successfulRes, err
 		} else {
 			log.Info("创建k8s资源-"+resouceKind+"-开始", zap.Any(resouceKind+" obj", resource.Object), zap.Any(resouceKind+"Res", groupVersionResource))
 			var (
@@ -150,14 +158,19 @@ func (tks TaskKubeSrv) Create(resouceYml string) error {
 			}
 			if err != nil {
 				log.Error("创建k8s资源-"+resouceKind+"-失败", zap.Any(resouceKind, resource), zap.Error(err))
-				return err
+				return successfulRes, err
+			} else {
+				log.Info("创建k8s资源-"+resouceKind+"-成功", zap.String("name", result.GetName()), zap.String("resouceYml", resouceYml))
+				successfulRes = append(successfulRes, struct {
+					Kind string `json:"kind"`
+					Name string `json:"name"`
+				}{Kind: resouceKind, Name: result.GetName()})
 			}
-			log.Info("创建k8s资源-"+resouceKind+"-成功", zap.String("name", result.GetName()), zap.String("resouceYml", resouceYml))
 		}
 	default:
 		log.Error("创建k8s资源-失败-不支持的资源类型", zap.String("resouceYml", resouceYml), zap.Any("resource", resource))
 	}
-	return nil
+	return successfulRes, nil
 }
 
 // 删除Deployment

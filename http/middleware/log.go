@@ -25,17 +25,19 @@ func (l *LogMiddleware) Middleware(next http.Handler) http.Handler {
 		startTime := time.Now()
 		uuid := uuid.New().String()
 		r.Header.Set("X-Request-Id", uuid)
-		l.logger.Info("客户端发起的HTTP请求开始",
-			zap.String("uuid", uuid),
-			zap.String("method", r.Method),
-			zap.String("url", r.RequestURI),
-			zap.String("proto", r.Proto),
-			zap.String("remoteAddr", r.RemoteAddr),
-			zap.String("userAgent", r.UserAgent()),
-			zap.String("referer", r.Referer()),
-			zap.Any("header", r.Header),
-			zap.Time("startTime", startTime),
-		)
+		if r.Method != http.MethodOptions {
+			l.logger.Info("客户端发起的HTTP请求开始",
+				zap.String("uuid", uuid),
+				zap.String("method", r.Method),
+				zap.String("url", r.RequestURI),
+				zap.String("proto", r.Proto),
+				zap.String("remoteAddr", r.RemoteAddr),
+				zap.String("userAgent", r.UserAgent()),
+				zap.String("referer", r.Referer()),
+				zap.Any("header", r.Header),
+				zap.Time("startTime", startTime),
+			)
+		}
 		recorder := httptest.NewRecorder()
 		next.ServeHTTP(recorder, r)
 		for k, v := range recorder.Header() {
@@ -47,12 +49,13 @@ func (l *LogMiddleware) Middleware(next http.Handler) http.Handler {
 			// 处理错误
 			l.logger.Error("写入响应失败", zap.Error(err))
 		}
-		l.logger.Info("客户端发起的HTTP请求结束",
-			zap.String("uuid", uuid),
-			zap.Int("status", recorder.Code),
-			zap.String("body", recorder.Body.String()),
-			zap.Time("endTime", time.Now()),
-			zap.Int64("totalTime", time.Since(startTime).Milliseconds()),
-		)
+		if r.Method != http.MethodOptions {
+			l.logger.Info("客户端发起的HTTP请求结束",
+				zap.String("uuid", uuid),
+				zap.Int("status", recorder.Code),
+				zap.Time("endTime", time.Now()),
+				zap.Int64("totalTime", time.Since(startTime).Milliseconds()),
+			)
+		}
 	})
 }

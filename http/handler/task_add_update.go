@@ -50,7 +50,7 @@ func (h *TaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.log.Info("task verify success", zap.String("uuid", uuid), zap.Any("task", task))
+	h.log.Info("task verify success", zap.String("uuid", uuid), zap.String("task.id", task.Id))
 	task.Uuid = uuid
 
 	var message string = ""
