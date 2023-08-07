@@ -63,6 +63,7 @@ func (f *FxSrv) Setup() {
 	handlerProv := fx.Provide(
 		fxhttp.AllAsRoute(
 			handler.NewTaskHandler,
+			handler.NewTaskResultHandler,
 			handler.NewTaskDelHandler,
 			handler.NewTasksHandler,
 			handler.NewTaskExecHandler)...,

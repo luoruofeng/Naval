@@ -6,19 +6,21 @@ import (
 	m "github.com/luoruofeng/Naval/component/mongo"
 	"github.com/luoruofeng/Naval/model"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
 
 type TaskResultMongoSrv struct {
-	Collection *mongo.Collection
-	MongoSrv   m.MongoSrv
-	Logger     *zap.Logger
+	Collection     *mongo.Collection
+	TaskCollection *mongo.Collection
+	MongoSrv       m.MongoSrv
+	Logger         *zap.Logger
 }
 
 func NewTaskResultMongoSrv(lc fx.Lifecycle, mongoSrv m.MongoSrv, logger *zap.Logger) TaskResultMongoSrv {
-	result := TaskResultMongoSrv{MongoSrv: mongoSrv, Logger: logger, Collection: mongoSrv.Db.Collection("task_results")}
+	result := TaskResultMongoSrv{MongoSrv: mongoSrv, Logger: logger, Collection: mongoSrv.Db.Collection("task_results"), TaskCollection: mongoSrv.Db.Collection("tasks")}
 
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
@@ -54,10 +56,41 @@ func NewTaskResultMongoSrv(lc fx.Lifecycle, mongoSrv m.MongoSrv, logger *zap.Log
 	return result
 }
 
+// Save 保存TaskResult
 func (s TaskResultMongoSrv) Save(TaskResult model.TaskResult) (*mongo.InsertOneResult, error) {
 	r, err := s.Collection.InsertOne(context.Background(), TaskResult)
 	if err != nil {
 		return nil, err
 	}
 	return r, nil
+}
+
+// FindById 根据taskId查询TaskResult
+func (s TaskResultMongoSrv) FindById(taskId string) ([]*model.TaskResult, error) {
+	result := make([]*model.TaskResult, 0)
+
+	findFilter := bson.M{"TaskId": taskId}
+	c, err := s.Collection.Find(context.Background(), findFilter)
+	if err != nil {
+		return nil, err
+	}
+	err = c.All(context.Background(), &result)
+	if err != nil {
+		return nil, err
+	}
+
+	availableResult := make([]*model.TaskResult, 0)
+	//查询TaskCollection中的Task的available字段
+	for _, r := range result {
+		var task model.Task
+		err := s.TaskCollection.FindOne(context.Background(), bson.M{"Id": taskId}).Decode(&task)
+		if err != nil {
+			return nil, err
+		}
+		if task.Available {
+			availableResult = append(availableResult, r)
+		}
+	}
+
+	return availableResult, nil
 }
