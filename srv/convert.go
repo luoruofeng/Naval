@@ -274,8 +274,24 @@ func (ts *TaskSrv) Convert(task *model.Task) error {
 	log.Info("转换任务-成功。mongoDB中更新字段:Items:items Type:create ConvertSuccessfully:true StateCode:Pendding", zap.Any("Items", items))
 	mongoSrv.UpdateKVs(task.MongoId, map[string]interface{}{"Items": items, "Type": model.Create, "ConvertSuccessfully": true, "StateCode": model.Pending, "IsRunning": false})
 
+	task, err = mongoSrv.FindById(task.Id)
+	if err != nil {
+		log.Error("转换任务-查找任务失败", zap.String("task-id", task.Id), zap.Error(err))
+		return err
+	}
+	err = ts.SetK8sResourceName(task)
+	if err != nil {
+		log.Error("转换任务-修改修改k8s资源名称失败", zap.Error(err))
+		return err
+	}
+	if _, err = mongoSrv.Update(*task); err != nil {
+		log.Error("转换任务-更新k8s资源名称失败", zap.String("task-id", task.Id), zap.Error(err))
+		return err
+	} else {
+		log.Info("转换任务-更新k8s资源名称成功", zap.String("task-id", task.Id))
+	}
+
 	if needExecuteImmediately {
-		//TODO 执行任务
 		log.Info("转换任务-结束。立即开始执行任务。")
 		ts.Update(*task)
 	} else {

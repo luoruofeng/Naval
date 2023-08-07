@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
+// convertMapKeysToStrings 将map[interface{}]interface{}转化为map[string]interface{}
 func convertMapKeysToStrings(obj interface{}) interface{} {
 
 	switch t := obj.(type) {
@@ -60,6 +61,9 @@ func YmlToUnstructured(ymlContent string) (*unstructured.Unstructured, error) {
 func GetK8sYamlKindAndName(task *model.Task) ([]string, []string, error) {
 	var kindSlice []string
 	var nameSlice []string
+	if task.Items == nil {
+		return nil, nil, errors.New("task中items为空")
+	}
 	for _, item := range task.Items {
 		if item.K8SYamlContent != "" {
 			// 获取kind
@@ -79,4 +83,26 @@ func GetK8sYamlKindAndName(task *model.Task) ([]string, []string, error) {
 		}
 	}
 	return kindSlice, nameSlice, nil
+}
+
+// 根据传入的names循环修改参数task中items的metadata的name
+func SetK8sYamlName(task *model.Task, names []string) error {
+	for i, item := range task.Items {
+		if item.K8SYamlContent != "" {
+			var mobj map[string]interface{} = make(map[string]interface{})
+			yamlData := []byte(item.K8SYamlContent)
+			yaml.Unmarshal(yamlData, mobj)
+			r, ok := convertMapKeysToStrings(mobj).(map[string]interface{})
+			if !ok {
+				return errors.New("将map[interface{}]interface{}转化为map[string]interface{}失败")
+			}
+			r["metadata"].(map[string]interface{})["name"] = names[i]
+			yamlData, err := yaml.Marshal(r)
+			if err != nil {
+				return err
+			}
+			task.Items[i].K8SYamlContent = string(yamlData)
+		}
+	}
+	return nil
 }

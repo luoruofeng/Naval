@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -154,6 +155,29 @@ func (ts *TaskSrv) CalcLatestExecTime() {
 
 func (t *TaskSrv) GetAllTask() ([]m.Task, error) {
 	return t.mongoT.GetAll()
+}
+
+// 为保证k8s资源name的唯一性，如果配置了K8sResourceNameHasSuffix为true，则在任务创建时为k8s资源添加任务id后缀
+func (ts *TaskSrv) SetK8sResourceName(task *m.Task) error {
+	if ts.cnf.K8sResourceNameHasSuffix {
+		_, names, err := kube.GetK8sYamlKindAndName(task)
+		if err != nil {
+			return err
+		}
+		newNames := make([]string, 0)
+		for _, name := range names {
+			if strings.HasSuffix(name, "-"+task.Id) {
+				newNames = append(newNames, name)
+			} else {
+				newNames = append(newNames, name+"-"+task.Id)
+			}
+		}
+		err = kube.SetK8sYamlName(task, newNames)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (t *TaskSrv) Unmarshal(c []byte) (*m.Task, error) {
@@ -420,6 +444,14 @@ func (ts *TaskSrv) Add(task m.Task) error {
 		task.ExtTimes = 0
 		// 设置任务转换次数
 		task.ConvertTimes = 1
+	}
+
+	if task.Type == m.Create {
+		err := ts.SetK8sResourceName(&task)
+		if err != nil {
+			log.Error("创建任务-设置k8s资源名称失败", zap.Error(err))
+			return err
+		}
 	}
 	// mongo保存任务
 	log.Info("创建任务-保存mongoDB", zap.String("task.id", task.Id))

@@ -2,7 +2,7 @@ package handler
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -25,7 +25,7 @@ func TestExec(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	respData, err := ioutil.ReadAll(resp.Body)
+	respData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Println("读取响应失败", err)
 		return

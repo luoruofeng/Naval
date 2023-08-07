@@ -2,7 +2,7 @@ package handler
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/luoruofeng/Naval/model"
@@ -31,7 +31,7 @@ func (h *TaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		h.log.Error("Could not read request body", zap.String("uuid", uuid), zap.Error(err))
 		http.Error(w, "Could not read request body", http.StatusInternalServerError)

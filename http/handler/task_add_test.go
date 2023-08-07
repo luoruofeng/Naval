@@ -3,7 +3,7 @@ package handler
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -23,7 +23,7 @@ func TestHandler(t *testing.T) {
 
 	// 获取项目根目录
 	rootDir := util.GetRootProjPath(cwd)
-	data, err := ioutil.ReadFile(filepath.Join(rootDir, "example/docker-compose/task2.yaml"))
+	data, err := os.ReadFile(filepath.Join(rootDir, "example/docker-compose/task2.yaml"))
 
 	if err != nil {
 		fmt.Println("获取项目根目录失败", err)
@@ -45,7 +45,7 @@ func TestHandler(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	respData, err := ioutil.ReadAll(resp.Body)
+	respData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Println("读取响应失败", err)
 		return
