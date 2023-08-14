@@ -83,7 +83,7 @@ func (s TaskResultMongoSrv) FindById(taskId string) ([]*model.TaskResult, error)
 	//查询TaskCollection中的Task的available字段
 	for _, r := range result {
 		var task model.Task
-		err := s.TaskCollection.FindOne(context.Background(), bson.M{"Id": taskId}).Decode(&task)
+		err := s.TaskCollection.FindOne(context.Background(), bson.M{"Id": taskId, "Available": true}).Decode(&task)
 		if err != nil {
 			return nil, err
 		}
