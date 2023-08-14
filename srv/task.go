@@ -19,6 +19,7 @@ import (
 
 	mongo "github.com/luoruofeng/Naval/component/mongo/logic"
 	m "github.com/luoruofeng/Naval/model"
+	mongoDB "go.mongodb.org/mongo-driver/mongo"
 )
 
 type TaskSrv struct {
@@ -418,6 +419,17 @@ func (ts *TaskSrv) Update(task m.Task) error {
 
 func (ts *TaskSrv) Add(task m.Task) error {
 	log := ts.logger
+
+	t, err := ts.mongoT.FindById(task.Id)
+	if err != nil && err != mongoDB.ErrNoDocuments {
+		log.Info("创建任务-查询任务失败-创建失败", zap.Any("task.Id", task.Id), zap.Error(err))
+		return err
+	}
+	if t != nil {
+		log.Info("创建任务-任务id已经存在-创建失败", zap.Any("task.Id", task.Id))
+		return errors.New("创建任务-任务id已经存在")
+	}
+
 	if task.Type == m.Create {
 		task.IsRunning = false // 设置任务不在运行
 		// 设置任务执行时间
